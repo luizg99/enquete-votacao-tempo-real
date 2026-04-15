@@ -18,6 +18,7 @@ export type Survey = {
   id: string;
   title: string;
   single_vote_per_device: boolean;
+  allow_multiple_choices: boolean;
   created_at: string;
   questions: Question[];
 };

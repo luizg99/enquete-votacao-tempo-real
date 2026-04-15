@@ -41,7 +41,7 @@ export async function createSurvey(title = 'Nova enquete'): Promise<Survey> {
 
 export async function updateSurvey(
   id: string,
-  patch: Partial<Pick<Survey, 'title' | 'single_vote_per_device'>>
+  patch: Partial<Pick<Survey, 'title' | 'single_vote_per_device' | 'allow_multiple_choices'>>
 ) {
   const sb = getSupabase();
   const { error } = await sb.from('surveys').update(patch).eq('id', id);
@@ -218,6 +218,7 @@ function normalizeSurvey(row: any): Survey {
     id: row.id,
     title: row.title ?? '',
     single_vote_per_device: row.single_vote_per_device ?? true,
+    allow_multiple_choices: row.allow_multiple_choices ?? false,
     created_at: row.created_at,
     questions,
   };

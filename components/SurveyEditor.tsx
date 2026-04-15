@@ -63,6 +63,17 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
         <span>Permitir apenas um voto por dispositivo</span>
       </label>
 
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={survey.allow_multiple_choices}
+          onChange={(e) =>
+            updateSurvey(survey.id, { allow_multiple_choices: e.target.checked })
+          }
+        />
+        <span>Permitir múltiplas escolhas por pergunta</span>
+      </label>
+
       <div style={{ marginTop: 16 }}>
         <h3>Perguntas</h3>
         {survey.questions.map((q) => (

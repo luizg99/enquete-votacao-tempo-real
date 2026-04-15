@@ -10,7 +10,7 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
-  const [selections, setSelections] = useState<Map<string, string>>(new Map());
+  const [selections, setSelections] = useState<Map<string, string[]>>(new Map());
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [alreadyVoted, setAlreadyVoted] = useState(false);
@@ -88,14 +88,32 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
 
   const q = valid[step];
   const progressPct = Math.round(((step + 1) / valid.length) * 100);
-  const selectedId = selections.get(q.id);
-  const canGo = !!selectedId;
+  const selectedIds = selections.get(q.id) ?? [];
+  const multi = survey.allow_multiple_choices;
+  const canGo = selectedIds.length > 0;
   const isLast = step === valid.length - 1;
+
+  const toggleAnswer = (answerId: string) => {
+    const next = new Map(selections);
+    const current = next.get(q.id) ?? [];
+    if (multi) {
+      next.set(
+        q.id,
+        current.includes(answerId) ? current.filter((id) => id !== answerId) : [...current, answerId]
+      );
+    } else {
+      next.set(q.id, [answerId]);
+    }
+    setSelections(next);
+  };
 
   return (
     <div className="vote-wrapper">
       <h1>{survey.title || 'Enquete'}</h1>
-      <div className="stepper">Pergunta {step + 1} de {valid.length}</div>
+      <div className="stepper">
+        Pergunta {step + 1} de {valid.length}
+        {multi && <span> · múltipla escolha</span>}
+      </div>
       <div className="progress">
         <div style={{ width: `${progressPct}%` }} />
       </div>
@@ -104,18 +122,19 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
         <h2>{q.text || '(pergunta sem texto)'}</h2>
 
         {q.answers.map((a) => {
-          const isSelected = selectedId === a.id;
+          const isSelected = selectedIds.includes(a.id);
           return (
             <label
               key={a.id}
               className={`option${isSelected ? ' selected' : ''}`}
-              onClick={() => {
-                const next = new Map(selections);
-                next.set(q.id, a.id);
-                setSelections(next);
-              }}
+              onClick={() => toggleAnswer(a.id)}
             >
-              <input type="radio" name={`q-${q.id}`} checked={isSelected} onChange={() => {}} />
+              <input
+                type={multi ? 'checkbox' : 'radio'}
+                name={`q-${q.id}`}
+                checked={isSelected}
+                onChange={() => {}}
+              />
               <span>{a.text || '(sem texto)'}</span>
             </label>
           );
@@ -138,8 +157,10 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
                 if (!canGo) return;
                 setSubmitting(true);
                 try {
-                  for (const [qId, aId] of selections) {
-                    await registerVote(survey.id, qId, aId);
+                  for (const [qId, aIds] of selections) {
+                    for (const aId of aIds) {
+                      await registerVote(survey.id, qId, aId);
+                    }
                   }
                   markVoted(survey.id);
                   setSubmitted(true);

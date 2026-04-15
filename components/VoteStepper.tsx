@@ -14,15 +14,15 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [alreadyVoted, setAlreadyVoted] = useState(false);
+  const [confirmedRevote, setConfirmedRevote] = useState(false);
+  const [declinedRevote, setDeclinedRevote] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
         const s = await getSurvey(surveyId);
         setSurvey(s);
-        if (s?.single_vote_per_device) {
-          setAlreadyVoted(hasVoted(surveyId));
-        }
+        setAlreadyVoted(hasVoted(surveyId));
       } catch (e: any) {
         setError(e.message ?? String(e));
       } finally {
@@ -35,11 +35,39 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   if (error) return <div className="card" style={{ color: '#dc2626' }}>{error}</div>;
   if (!survey) return <div className="empty">Enquete não encontrada.</div>;
 
-  if (alreadyVoted && !submitted) {
+  // Já respondeu e a enquete permite só um voto → bloqueia
+  if (alreadyVoted && !submitted && survey.single_vote_per_device) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 40 }}>
         <h1>✓ Você já respondeu</h1>
         <p className="muted">Cada dispositivo pode votar apenas uma vez nesta enquete.</p>
+      </div>
+    );
+  }
+
+  // Já respondeu, mas a enquete permite múltiplos votos → pergunta
+  if (alreadyVoted && !submitted && !confirmedRevote && !declinedRevote) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+        <h1>Você já votou nesta enquete</h1>
+        <p className="muted">Deseja responder novamente?</p>
+        <div className="row" style={{ justifyContent: 'center', marginTop: 20 }}>
+          <button className="btn ghost" onClick={() => setDeclinedRevote(true)}>
+            Não, obrigado
+          </button>
+          <button className="btn primary" onClick={() => setConfirmedRevote(true)}>
+            Sim, votar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (declinedRevote) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+        <h1>✓ Obrigado pela participação!</h1>
+        <p className="muted">Sua resposta anterior já foi registrada.</p>
       </div>
     );
   }
@@ -113,7 +141,7 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
                   for (const [qId, aId] of selections) {
                     await registerVote(survey.id, qId, aId);
                   }
-                  if (survey.single_vote_per_device) markVoted(survey.id);
+                  markVoted(survey.id);
                   setSubmitted(true);
                 } catch (e: any) {
                   alert('Erro ao registrar voto: ' + (e.message ?? e));

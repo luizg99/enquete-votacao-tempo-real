@@ -11,6 +11,7 @@
 create table if not exists public.surveys (
   id text primary key,
   title text not null default '',
+  single_vote_per_device boolean not null default true,
   created_at timestamptz not null default now()
 );
 

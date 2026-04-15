@@ -17,6 +17,7 @@ export type Question = {
 export type Survey = {
   id: string;
   title: string;
+  single_vote_per_device: boolean;
   created_at: string;
   questions: Question[];
 };

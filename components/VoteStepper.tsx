@@ -16,11 +16,13 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [alreadyVoted, setAlreadyVoted] = useState(false);
 
   useEffect(() => {
-    setAlreadyVoted(hasVoted(surveyId));
     (async () => {
       try {
         const s = await getSurvey(surveyId);
         setSurvey(s);
+        if (s?.single_vote_per_device) {
+          setAlreadyVoted(hasVoted(surveyId));
+        }
       } catch (e: any) {
         setError(e.message ?? String(e));
       } finally {
@@ -111,7 +113,7 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
                   for (const [qId, aId] of selections) {
                     await registerVote(survey.id, qId, aId);
                   }
-                  markVoted(survey.id);
+                  if (survey.single_vote_per_device) markVoted(survey.id);
                   setSubmitted(true);
                 } catch (e: any) {
                   alert('Erro ao registrar voto: ' + (e.message ?? e));

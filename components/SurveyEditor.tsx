@@ -52,6 +52,17 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
       <label className="muted">Descrição</label>
       <TitleInput survey={survey} />
 
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={survey.single_vote_per_device}
+          onChange={(e) =>
+            updateSurvey(survey.id, { single_vote_per_device: e.target.checked })
+          }
+        />
+        <span>Permitir apenas um voto por dispositivo</span>
+      </label>
+
       <div style={{ marginTop: 16 }}>
         <h3>Perguntas</h3>
         {survey.questions.map((q) => (

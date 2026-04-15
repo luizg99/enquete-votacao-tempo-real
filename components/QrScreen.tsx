@@ -27,11 +27,11 @@ export function QrScreen({ surveyId }: { surveyId: string }) {
   }, [surveyId]);
 
   useEffect(() => {
-    if (!canvasRef.current || !url) return;
+    if (!canvasRef.current || !url || !survey) return;
     QRCode.toCanvas(canvasRef.current, url, { width: 320, margin: 1 }, (err) => {
       if (err) console.error(err);
     });
-  }, [url]);
+  }, [url, survey]);
 
   if (loading) return <div className="card">Carregando…</div>;
   if (!survey) return <div className="empty">Enquete não encontrada.</div>;

@@ -127,13 +127,12 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
             <label
               key={a.id}
               className={`option${isSelected ? ' selected' : ''}`}
-              onClick={() => toggleAnswer(a.id)}
             >
               <input
                 type={multi ? 'checkbox' : 'radio'}
                 name={`q-${q.id}`}
                 checked={isSelected}
-                onChange={() => {}}
+                onChange={() => toggleAnswer(a.id)}
               />
               <span>{a.text || '(sem texto)'}</span>
             </label>

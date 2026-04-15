@@ -56,8 +56,7 @@ https://luizg99.github.io/enquete-votacao-tempo-real/
 
 | Rota | Propósito |
 |---|---|
-| `/admin` | CRUD de enquetes |
-| `/dashboard` | Lista enquetes, botões QR e Acompanhar |
+| `/admin` | CRUD de enquetes, Lista enquetes, botões QR e Acompanhar|
 | `/vote?id=<srv>` | Usuário responde (alvo do QR) |
 | `/qr?id=<srv>` | QR em tela cheia |
 | `/track?id=<srv>` | Dashboard com gráficos em tempo real |

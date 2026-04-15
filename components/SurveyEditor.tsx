@@ -1,0 +1,182 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import type { Survey } from '@/lib/types';
+import {
+  getSurvey,
+  updateSurvey,
+  addQuestion,
+  removeQuestion,
+  updateQuestion,
+  addAnswer,
+  removeAnswer,
+  updateAnswer,
+  subscribeSurveyChanges,
+} from '@/lib/store';
+
+function useDebouncedCallback<T extends (...args: any[]) => void>(fn: T, ms = 400) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  return (...args: Parameters<T>) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => fn(...args), ms);
+  };
+}
+
+export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose: () => void }) {
+  const [survey, setSurvey] = useState<Survey | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const reload = async () => {
+    const s = await getSurvey(surveyId);
+    setSurvey(s);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    reload();
+    const unsub = subscribeSurveyChanges(surveyId, reload);
+    return unsub;
+  }, [surveyId]);
+
+  if (loading) return <div className="card">Carregando…</div>;
+  if (!survey) return <div className="card">Enquete não encontrada.</div>;
+
+  return (
+    <div className="card">
+      <div className="row" style={{ marginBottom: 10 }}>
+        <h2>Editando enquete</h2>
+        <div className="spacer" />
+        <button className="btn ghost" onClick={onClose}>Fechar editor</button>
+      </div>
+
+      <label className="muted">Descrição</label>
+      <TitleInput survey={survey} />
+
+      <div style={{ marginTop: 16 }}>
+        <h3>Perguntas</h3>
+        {survey.questions.map((q) => (
+          <QuestionBlock key={q.id} surveyId={survey.id} question={q} />
+        ))}
+        <div style={{ marginTop: 12 }}>
+          <button className="btn" onClick={() => addQuestion(survey.id, '')}>
+            + Adicionar pergunta
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TitleInput({ survey }: { survey: Survey }) {
+  const [value, setValue] = useState(survey.title);
+  const save = useDebouncedCallback((v: string) => updateSurvey(survey.id, { title: v }), 400);
+
+  // Mantém o input controlado sem ser sobrescrito por reloads
+  useEffect(() => {
+    setValue(survey.title);
+    // propositalmente: NÃO dependemos de survey.title, só do id.
+    // Reloads não devem apagar o que o usuário está digitando.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [survey.id]);
+
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder="Descrição/título da enquete"
+      onChange={(e) => {
+        setValue(e.target.value);
+        save(e.target.value);
+      }}
+    />
+  );
+}
+
+function QuestionBlock({
+  surveyId,
+  question,
+}: {
+  surveyId: string;
+  question: Survey['questions'][number];
+}) {
+  return (
+    <div className="question-block">
+      <div className="row">
+        <QuestionTextInput question={question} />
+        <button
+          className="btn danger"
+          onClick={() => {
+            if (confirm('Excluir esta pergunta?')) removeQuestion(question.id);
+          }}
+        >
+          Excluir pergunta
+        </button>
+      </div>
+
+      <div>
+        {question.answers.map((a) => (
+          <div key={a.id} className="answer-row">
+            <AnswerTextInput answer={a} />
+            <button
+              className="btn icon danger"
+              title="Excluir resposta"
+              onClick={() => removeAnswer(a.id)}
+            >
+              🗑
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <button className="btn" onClick={() => addAnswer(question.id, '')}>
+          + Adicionar resposta
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function QuestionTextInput({ question }: { question: Survey['questions'][number] }) {
+  const [value, setValue] = useState(question.text);
+  const save = useDebouncedCallback((v: string) => updateQuestion(question.id, { text: v }), 400);
+
+  useEffect(() => {
+    setValue(question.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
+
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder="Texto da pergunta"
+      onChange={(e) => {
+        setValue(e.target.value);
+        save(e.target.value);
+      }}
+    />
+  );
+}
+
+function AnswerTextInput({ answer }: { answer: Survey['questions'][number]['answers'][number] }) {
+  const [value, setValue] = useState(answer.text);
+  const save = useDebouncedCallback((v: string) => updateAnswer(answer.id, { text: v }), 400);
+
+  useEffect(() => {
+    setValue(answer.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answer.id]);
+
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder="Texto da resposta"
+      onChange={(e) => {
+        setValue(e.target.value);
+        save(e.target.value);
+      }}
+    />
+  );
+}

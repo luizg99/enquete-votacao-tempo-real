@@ -1,67 +1,95 @@
 # Task Question — Enquete/Votação em Tempo Real
 
-MVP 100% frontend (HTML/CSS/JS puro) para criar enquetes, compartilhar via QR code e acompanhar votos em tempo real.
+App de enquetes e votação com resultados em tempo real. Stack:
 
-## Funcionalidades
+- **Next.js 15** (App Router, static export para GitHub Pages)
+- **TypeScript**
+- **Supabase** (Postgres + Realtime) como backend
+- **qrcode** (client-side) para gerar os QR codes
 
-1. **Admin** (`#/admin`) — cria, edita e exclui enquetes, perguntas e respostas. Autosave.
-2. **Usuário** (`#/vote/:id`) — responde uma pergunta por vez via radio buttons.
-3. **Dashboard** (`#/dashboard`) — lista todas as enquetes com botões **QR Code Votação** e **Acompanhar Enquete**.
-4. **QR Code** (`#/qr/:id`) — tela cheia com QR apontando para a rota de voto (via `qrcode.js`).
-5. **Acompanhamento** (`#/track/:id`) — gráficos em barras horizontais com atualização automática (polling 1s + evento `storage`).
+---
 
-## Stack
+## Pré-requisitos
 
-- HTML5, CSS3, JavaScript ES modules (sem build)
-- `qrcode.js` via CDN
-- `localStorage` como único storage
-- Hash routing próprio, sem frameworks
+- Node.js 20+
+- Uma conta gratuita em https://supabase.com
 
-## Como rodar localmente
+---
 
-Como o código usa módulos ES (`import`), é necessário um servidor HTTP (não abra `index.html` direto):
+## 1. Configurar o Supabase
+
+1. Em https://app.supabase.com → **New project**. Escolha nome, região (São Paulo) e senha.
+2. No painel do projeto → **SQL Editor** → **New query** → cole o conteúdo de [supabase/schema.sql](supabase/schema.sql) → **Run**. Isso cria tabelas, RLS e habilita Realtime.
+3. Em **Project Settings → API**, copie:
+   - `Project URL`
+   - `anon public key`
+
+## 2. Rodar localmente
 
 ```bash
-# Python 3
-python -m http.server 8080
-# ou Node
-npx serve .
+cp .env.example .env.local
+# edite .env.local com a URL e a anon key do Supabase
+npm install
+npm run dev
 ```
 
-Depois abra <http://localhost:8080>.
+Abra http://localhost:3000 — a home redireciona para `/admin`.
 
-## Deploy no GitHub Pages
+## 3. Deploy no GitHub Pages
 
-1. Faça push para a branch `main`.
-2. Em **Settings → Pages**, selecione a fonte como **GitHub Actions**.
-3. O workflow `.github/workflows/deploy.yml` publica automaticamente.
-4. A URL pública será algo como `https://<usuario>.github.io/<repo>/`.
+Em **Settings → Secrets and variables → Actions** do repositório, adicione:
 
-O QR code gerado usa `location.origin + location.pathname`, então o deploy em subpath do GitHub Pages funciona sem ajustes.
+| Nome | Valor |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL do seu projeto Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public key |
 
-## Estrutura de dados
+Em **Settings → Pages → Source**, selecione **GitHub Actions**.
 
-Documentada em [config.yml](config.yml). Resumo:
+Faça push para `main` — o workflow `.github/workflows/deploy.yml` builda (`next build` com `output: 'export'`) e publica em:
+
+https://luizg99.github.io/enquete-votacao-tempo-real/
+
+---
+
+## Rotas
+
+| Rota | Propósito |
+|---|---|
+| `/admin` | CRUD de enquetes |
+| `/dashboard` | Lista enquetes, botões QR e Acompanhar |
+| `/vote?id=<srv>` | Usuário responde (alvo do QR) |
+| `/qr?id=<srv>` | QR em tela cheia |
+| `/track?id=<srv>` | Dashboard com gráficos em tempo real |
+
+IDs vão em query string em vez de path param porque static export não pré-gera rotas dinâmicas criadas em runtime.
+
+---
+
+## Arquitetura
 
 ```
-survey { id, title, createdAt, questions[ { id, text, answers[ { id, text, votes } ] } ] }
-vote   { surveyId, questionId, answerId, ts }
+app/            # páginas (App Router)
+components/     # componentes React client
+lib/
+  supabase.ts   # cliente Supabase (singleton)
+  store.ts      # CRUD + subscriptions realtime
+  types.ts      # tipos compartilhados
+supabase/
+  schema.sql    # SQL completo: tabelas, RLS, realtime, view tally
 ```
 
-## Limitações conhecidas do MVP
+### Tempo real
 
-- **Sincronização apenas por navegador**: `localStorage` é local ao dispositivo. Votos feitos em celulares diferentes **não** chegam ao dashboard automaticamente. Para multi-dispositivo é necessário backend (Firebase/Supabase/etc.) — fora do escopo do MVP.
-- **Sem autenticação**: qualquer visitante com a URL pode acessar o admin.
-- **Sem validação contra votos múltiplos**: o mesmo usuário pode votar várias vezes.
+O dashboard se inscreve em `postgres_changes` da tabela `votes` (e `surveys/questions/answers` para refletir edições). A atualização é instantânea, sem polling.
 
-Para uma demo controlada (ex: em projetor), abra admin/dashboard em uma aba e recolha votos em outras abas do mesmo navegador — a atualização é instantânea via evento `storage`.
+### Segurança
 
-## Arquivos principais
+Para MVP, RLS permite CRUD anônimo em todas as tabelas — é um app público de enquete. Para restringir o admin depois, adicione autenticação Supabase e troque as policies por `using (auth.uid() = owner_id)`.
 
-- [index.html](index.html) — shell
-- [js/app.js](js/app.js) — bootstrap + registro de rotas
-- [js/router.js](js/router.js) — hash router
-- [js/store.js](js/store.js) — estado + persistência
-- [js/views/](js/views/) — telas (admin, vote, dashboard, qr, track)
-- [css/styles.css](css/styles.css)
-- [config.yml](config.yml) — documentação da arquitetura de dados
+---
+
+## Limitações conhecidas
+
+- Não há controle de voto duplicado: o mesmo usuário pode votar várias vezes (não há fingerprinting nem auth). Para evitar, adicione um cookie/localStorage check + constraint única em `(survey_id, question_id, voter_fingerprint)`.
+- Admin sem autenticação: qualquer visitante pode criar/editar/excluir enquetes.

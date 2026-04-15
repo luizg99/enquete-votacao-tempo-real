@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { Survey } from '@/lib/types';
 import { getSurvey, registerVote } from '@/lib/store';
+import { hasVoted, markVoted } from '@/lib/voter';
 
 export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [survey, setSurvey] = useState<Survey | null>(null);
@@ -12,8 +13,10 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [selections, setSelections] = useState<Map<string, string>>(new Map());
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [alreadyVoted, setAlreadyVoted] = useState(false);
 
   useEffect(() => {
+    setAlreadyVoted(hasVoted(surveyId));
     (async () => {
       try {
         const s = await getSurvey(surveyId);
@@ -29,6 +32,15 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   if (loading) return <div className="card">Carregando…</div>;
   if (error) return <div className="card" style={{ color: '#dc2626' }}>{error}</div>;
   if (!survey) return <div className="empty">Enquete não encontrada.</div>;
+
+  if (alreadyVoted && !submitted) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+        <h1>✓ Você já respondeu</h1>
+        <p className="muted">Cada dispositivo pode votar apenas uma vez nesta enquete.</p>
+      </div>
+    );
+  }
 
   const valid = survey.questions.filter((q) => q.answers.length > 0);
   if (valid.length === 0) {
@@ -99,6 +111,7 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
                   for (const [qId, aId] of selections) {
                     await registerVote(survey.id, qId, aId);
                   }
+                  markVoted(survey.id);
                   setSubmitted(true);
                 } catch (e: any) {
                   alert('Erro ao registrar voto: ' + (e.message ?? e));

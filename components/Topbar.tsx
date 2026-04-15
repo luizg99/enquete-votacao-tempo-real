@@ -20,9 +20,6 @@ export function Topbar() {
         <Link href="/admin" className={isActive('/admin') ? 'active' : ''}>
           Admin
         </Link>
-        <Link href="/dashboard" className={isActive('/dashboard') ? 'active' : ''}>
-          Dashboard
-        </Link>
       </nav>
     </header>
   );

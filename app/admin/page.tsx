@@ -36,7 +36,7 @@ export default function AdminPage() {
         />
       )}
 
-      <SurveyList onEdit={(id) => setEditingId(id)} />
+      <SurveyList onEdit={(id) => setEditingId(id)} showDashboardLinks />
     </EnvGuard>
   );
 }

@@ -38,7 +38,7 @@ export function QrScreen({ surveyId }: { surveyId: string }) {
 
   return (
     <div className="qr-fullscreen">
-      <button className="btn close" onClick={() => router.push('/dashboard')}>
+      <button className="btn close" onClick={() => router.push('/admin')}>
         ✕ Fechar
       </button>
       <h2>{survey.title || 'Enquete'}</h2>

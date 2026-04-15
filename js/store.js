@@ -19,15 +19,15 @@ function load() {
   }
 }
 
-function save(state) {
+function save(state, silent = false) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  window.dispatchEvent(new CustomEvent(CHANGED_EVENT));
+  if (!silent) window.dispatchEvent(new CustomEvent(CHANGED_EVENT));
 }
 
-function mutate(fn) {
+function mutate(fn, silent = false) {
   const state = load();
   const result = fn(state);
-  save(state);
+  save(state, silent);
   return result;
 }
 
@@ -63,7 +63,7 @@ export const store = {
     mutate(state => {
       const s = state.surveys.find(s => s.id === id);
       if (s) Object.assign(s, patch);
-    });
+    }, true);
   },
 
   deleteSurvey(id) {
@@ -89,7 +89,7 @@ export const store = {
       const s = state.surveys.find(s => s.id === surveyId);
       const q = s?.questions.find(q => q.id === qId);
       if (q) Object.assign(q, patch);
-    });
+    }, true);
   },
 
   removeQuestion(surveyId, qId) {
@@ -119,7 +119,7 @@ export const store = {
       const q = s?.questions.find(q => q.id === qId);
       const a = q?.answers.find(a => a.id === aId);
       if (a) Object.assign(a, patch);
-    });
+    }, true);
   },
 
   removeAnswer(surveyId, qId, aId) {

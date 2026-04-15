@@ -43,7 +43,7 @@ export function renderAdmin(root) {
   draw();
   const onChange = () => draw();
   store.onChange(onChange);
-  return () => {}; // cleanup handled by event listeners (idempotent)
+  return () => {};
 }
 
 function renderHeader() {

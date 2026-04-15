@@ -3,8 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+const HIDDEN_ON = ['/vote', '/qr'];
+
 export function Topbar() {
   const path = usePathname() ?? '';
+  if (HIDDEN_ON.some((p) => path.startsWith(p))) return null;
+
   const isActive = (target: string) => path.startsWith(target);
 
   return (

@@ -77,7 +77,26 @@ export function JoinFlow({ executionId }: { executionId: string }) {
         setParticipant(p);
         if (p) await reloadResponses(p.id);
 
-        unsubExec = subscribeExecution(executionId, reloadExec);
+        unsubExec = subscribeExecution(executionId, (payload?: any) => {
+          // Fast-path: aplica o new row direto, evita round-trip
+          if (payload?.eventType === 'UPDATE' && payload.new) {
+            const n = payload.new;
+            setExec((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    title: n.title ?? prev.title,
+                    status: n.status ?? prev.status,
+                    current_question_id: n.current_question_id ?? null,
+                    started_at: n.started_at ?? prev.started_at,
+                    finished_at: n.finished_at ?? prev.finished_at,
+                  }
+                : prev
+            );
+          } else {
+            reloadExec();
+          }
+        });
         unsubResp = subscribeExecutionResponses(executionId, () => {
           if (p) reloadResponses(p.id);
         });
@@ -131,6 +150,7 @@ export function JoinFlow({ executionId }: { executionId: string }) {
       execution={exec}
       participant={participant}
       responses={responses}
+      setResponses={setResponses}
       onEdit={() => setShowEdit(true)}
       onResponsesChanged={() => reloadResponses(participant.id)}
     />
@@ -228,17 +248,17 @@ function ParticipantVoteScreen({
   execution,
   participant,
   responses,
+  setResponses,
   onEdit,
   onResponsesChanged,
 }: {
   execution: Execution;
   participant: Participant;
   responses: ExecutionResponse[];
+  setResponses: React.Dispatch<React.SetStateAction<ExecutionResponse[]>>;
   onEdit: () => void;
   onResponsesChanged: () => void;
 }) {
-  const [submitting, setSubmitting] = useState(false);
-
   const questions = execution.survey?.questions ?? [];
   const currentQuestion = useMemo(() => {
     if (!execution.current_question_id) return null;
@@ -290,33 +310,53 @@ function ParticipantVoteScreen({
     );
   }
 
-  const toggleSingle = async (answerId: string) => {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      await setSingleResponse(execution.id, participant.id, currentQuestion.id, answerId);
-      onResponsesChanged();
-    } catch (e: any) {
-      alert('Falha ao registrar: ' + (e.message ?? e));
-    } finally {
-      setSubmitting(false);
-    }
+  const optimisticRow = (answerId: string): ExecutionResponse => ({
+    id: -Date.now() - Math.floor(Math.random() * 1000),
+    execution_id: execution.id,
+    participant_id: participant.id,
+    question_id: currentQuestion.id,
+    answer_id: answerId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  const toggleSingle = (answerId: string) => {
+    // Atualização otimista: troca a resposta local imediatamente
+    setResponses((prev) => [
+      ...prev.filter((r) => r.question_id !== currentQuestion.id),
+      optimisticRow(answerId),
+    ]);
+    // Persiste em background
+    setSingleResponse(execution.id, participant.id, currentQuestion.id, answerId).catch(
+      (e: any) => {
+        alert('Falha ao registrar: ' + (e.message ?? e));
+        onResponsesChanged();
+      }
+    );
   };
 
-  const toggleMulti = async (answerId: string) => {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      if (selectedIds.has(answerId)) {
-        await removeMultiResponse(execution.id, participant.id, currentQuestion.id, answerId);
-      } else {
-        await addMultiResponse(execution.id, participant.id, currentQuestion.id, answerId);
-      }
-      onResponsesChanged();
-    } catch (e: any) {
-      alert('Falha ao registrar: ' + (e.message ?? e));
-    } finally {
-      setSubmitting(false);
+  const toggleMulti = (answerId: string) => {
+    const isSel = selectedIds.has(answerId);
+    if (isSel) {
+      setResponses((prev) =>
+        prev.filter(
+          (r) => !(r.question_id === currentQuestion.id && r.answer_id === answerId)
+        )
+      );
+      removeMultiResponse(execution.id, participant.id, currentQuestion.id, answerId).catch(
+        (e: any) => {
+          alert('Falha ao registrar: ' + (e.message ?? e));
+          onResponsesChanged();
+        }
+      );
+    } else {
+      setResponses((prev) => [...prev, optimisticRow(answerId)]);
+      addMultiResponse(execution.id, participant.id, currentQuestion.id, answerId).catch(
+        (e: any) => {
+          alert('Falha ao registrar: ' + (e.message ?? e));
+          onResponsesChanged();
+        }
+      );
     }
   };
 

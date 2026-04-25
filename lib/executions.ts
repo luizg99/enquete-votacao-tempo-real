@@ -282,14 +282,17 @@ export function subscribeExecutionList(onChange: () => void) {
   return () => { sb.removeChannel(channel); };
 }
 
-export function subscribeExecution(executionId: string, onChange: () => void) {
+export function subscribeExecution(
+  executionId: string,
+  onChange: (payload?: any) => void
+) {
   const sb = getSupabase();
   const channel = sb
     .channel(`exec-${executionId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'executions', filter: `id=eq.${executionId}` },
-      () => onChange()
+      (payload) => onChange(payload)
     )
     .subscribe();
   return () => { sb.removeChannel(channel); };

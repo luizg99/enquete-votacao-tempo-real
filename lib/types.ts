@@ -36,3 +36,46 @@ export type TallyQuestion = {
   total: number;
   answers: TallyAnswer[];
 };
+
+// ---------- Execuções ----------
+export type ExecutionStatus = 'draft' | 'running' | 'finished';
+
+export type Execution = {
+  id: string;
+  survey_id: string;
+  title: string;
+  status: ExecutionStatus;
+  current_question_id: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  survey?: Survey;
+  participant_count?: number;
+};
+
+export type Participant = {
+  id: string;
+  execution_id: string;
+  device_id: string;
+  company: string;
+  full_name: string;
+  phone: string;
+  joined_at: string;
+  last_seen_at: string;
+};
+
+export type ExecutionResponse = {
+  id: number;
+  execution_id: string;
+  participant_id: string;
+  question_id: string;
+  answer_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Branding = {
+  id: number;
+  logo_url: string | null;
+  updated_at: string;
+};

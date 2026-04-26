@@ -285,6 +285,12 @@ input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset:
 }
 .join-header strong { font-size: 14px; }
 .center { text-align: center; padding: 40px 16px; }
+.join-warning {
+  background: #fef3c7; color: #92400e;
+  border: 1px solid #f59e0b;
+  padding: 10px 14px; border-radius: var(--radius);
+  margin-bottom: 12px; font-size: 14px;
+}
 
 /* ----------------- Logo Editor ----------------- */
 .logo-preview {

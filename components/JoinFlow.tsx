@@ -259,6 +259,19 @@ function ParticipantVoteScreen({
   onEdit: () => void;
   onResponsesChanged: () => void;
 }) {
+  const [warning, setWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!warning) return;
+    const t = setTimeout(() => setWarning(null), 4000);
+    return () => clearTimeout(t);
+  }, [warning]);
+
+  const handleFailure = () => {
+    setWarning('Sem conexão estável. Sua resposta não foi salva — toque novamente.');
+    onResponsesChanged();
+  };
+
   const questions = execution.survey?.questions ?? [];
   const currentQuestion = useMemo(() => {
     if (!execution.current_question_id) return null;
@@ -321,17 +334,12 @@ function ParticipantVoteScreen({
   });
 
   const toggleSingle = (answerId: string) => {
-    // Atualização otimista: troca a resposta local imediatamente
     setResponses((prev) => [
       ...prev.filter((r) => r.question_id !== currentQuestion.id),
       optimisticRow(answerId),
     ]);
-    // Persiste em background
     setSingleResponse(execution.id, participant.id, currentQuestion.id, answerId).catch(
-      (e: any) => {
-        alert('Falha ao registrar: ' + (e.message ?? e));
-        onResponsesChanged();
-      }
+      handleFailure
     );
   };
 
@@ -344,18 +352,12 @@ function ParticipantVoteScreen({
         )
       );
       removeMultiResponse(execution.id, participant.id, currentQuestion.id, answerId).catch(
-        (e: any) => {
-          alert('Falha ao registrar: ' + (e.message ?? e));
-          onResponsesChanged();
-        }
+        handleFailure
       );
     } else {
       setResponses((prev) => [...prev, optimisticRow(answerId)]);
       addMultiResponse(execution.id, participant.id, currentQuestion.id, answerId).catch(
-        (e: any) => {
-          alert('Falha ao registrar: ' + (e.message ?? e));
-          onResponsesChanged();
-        }
+        handleFailure
       );
     }
   };
@@ -363,6 +365,8 @@ function ParticipantVoteScreen({
   return (
     <div className="join-screen">
       <Header participant={participant} onEdit={onEdit} />
+
+      {warning && <div className="join-warning">{warning}</div>}
 
       <div className="card">
         <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>

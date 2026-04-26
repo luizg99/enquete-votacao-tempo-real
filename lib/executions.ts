@@ -13,6 +13,29 @@ function uid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 }
 
+// Retry com backoff exponencial para erros transientes de rede
+async function withRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
+  let lastErr: any;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastErr = e;
+      const msg = String(e?.message ?? e ?? '').toLowerCase();
+      const isNetwork =
+        msg.includes('load failed') ||
+        msg.includes('failed to fetch') ||
+        msg.includes('networkerror') ||
+        msg.includes('aborted') ||
+        msg.includes('timeout') ||
+        msg.includes('fetch');
+      if (!isNetwork || i === attempts - 1) throw e;
+      await new Promise((r) => setTimeout(r, 250 * Math.pow(2, i)));
+    }
+  }
+  throw lastErr;
+}
+
 // ---------- Executions ----------
 export async function listExecutions(): Promise<Execution[]> {
   const sb = getSupabase();
@@ -194,14 +217,16 @@ export async function setSingleResponse(
   questionId: string,
   answerId: string
 ) {
-  const sb = getSupabase();
-  const { error } = await sb.rpc('set_single_response', {
-    p_exec: executionId,
-    p_part: participantId,
-    p_q: questionId,
-    p_a: answerId,
+  return withRetry(async () => {
+    const sb = getSupabase();
+    const { error } = await sb.rpc('set_single_response', {
+      p_exec: executionId,
+      p_part: participantId,
+      p_q: questionId,
+      p_a: answerId,
+    });
+    if (error) throw error;
   });
-  if (error) throw error;
 }
 
 export async function addMultiResponse(
@@ -210,14 +235,16 @@ export async function addMultiResponse(
   questionId: string,
   answerId: string
 ) {
-  const sb = getSupabase();
-  const { error } = await sb.from('execution_responses').insert({
-    execution_id: executionId,
-    participant_id: participantId,
-    question_id: questionId,
-    answer_id: answerId,
+  return withRetry(async () => {
+    const sb = getSupabase();
+    const { error } = await sb.from('execution_responses').insert({
+      execution_id: executionId,
+      participant_id: participantId,
+      question_id: questionId,
+      answer_id: answerId,
+    });
+    if (error && (error as any).code !== '23505') throw error; // ignora duplicate
   });
-  if (error && (error as any).code !== '23505') throw error; // ignora duplicate
 }
 
 export async function removeMultiResponse(
@@ -226,15 +253,17 @@ export async function removeMultiResponse(
   questionId: string,
   answerId: string
 ) {
-  const sb = getSupabase();
-  const { error } = await sb
-    .from('execution_responses')
-    .delete()
-    .eq('execution_id', executionId)
-    .eq('participant_id', participantId)
-    .eq('question_id', questionId)
-    .eq('answer_id', answerId);
-  if (error) throw error;
+  return withRetry(async () => {
+    const sb = getSupabase();
+    const { error } = await sb
+      .from('execution_responses')
+      .delete()
+      .eq('execution_id', executionId)
+      .eq('participant_id', participantId)
+      .eq('question_id', questionId)
+      .eq('answer_id', answerId);
+    if (error) throw error;
+  });
 }
 
 export async function tallyExecution(executionId: string): Promise<TallyQuestion[]> {

@@ -304,12 +304,15 @@ export async function tallyExecution(executionId: string): Promise<TallyQuestion
 // ---------- Realtime ----------
 export function subscribeExecutionList(onChange: () => void) {
   const sb = getSupabase();
+  const name = `executions-list-${Math.random().toString(36).slice(2, 10)}`;
   const channel = sb
-    .channel('executions-list')
+    .channel(name)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'executions' }, () => onChange())
     .subscribe();
   return () => { sb.removeChannel(channel); };
 }
+
+function rand() { return Math.random().toString(36).slice(2, 10); }
 
 export function subscribeExecution(
   executionId: string,
@@ -317,7 +320,7 @@ export function subscribeExecution(
 ) {
   const sb = getSupabase();
   const channel = sb
-    .channel(`exec-${executionId}`)
+    .channel(`exec-${executionId}-${rand()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'executions', filter: `id=eq.${executionId}` },
@@ -330,7 +333,7 @@ export function subscribeExecution(
 export function subscribeExecutionResponses(executionId: string, onChange: () => void) {
   const sb = getSupabase();
   const channel = sb
-    .channel(`exec-resp-${executionId}`)
+    .channel(`exec-resp-${executionId}-${rand()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'execution_responses', filter: `execution_id=eq.${executionId}` },
@@ -343,7 +346,7 @@ export function subscribeExecutionResponses(executionId: string, onChange: () =>
 export function subscribeParticipants(executionId: string, onChange: () => void) {
   const sb = getSupabase();
   const channel = sb
-    .channel(`exec-part-${executionId}`)
+    .channel(`exec-part-${executionId}-${rand()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'participants', filter: `execution_id=eq.${executionId}` },

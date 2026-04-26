@@ -8,17 +8,27 @@ const SESSION_KEY = 'taskq:logoUnlocked';
 
 export function LogoEditor() {
   const [unlocked, setUnlocked] = useState(false);
-  const [pw, setPw] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pwInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && sessionStorage.getItem(SESSION_KEY) === '1') {
       setUnlocked(true);
     }
   }, []);
+
+  const tryUnlock = () => {
+    const raw = pwInputRef.current?.value ?? '';
+    if (raw.trim() === SECRET_PASSWORD) {
+      sessionStorage.setItem(SESSION_KEY, '1');
+      setUnlocked(true);
+    } else {
+      alert('Senha incorreta.');
+    }
+  };
 
   useEffect(() => {
     if (!unlocked) return;
@@ -38,41 +48,30 @@ export function LogoEditor() {
 
   if (!unlocked) {
     return (
-      <div className="card" style={{ maxWidth: 420, margin: '60px auto' }}>
+      <form
+        className="card"
+        style={{ maxWidth: 420, margin: '60px auto' }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          tryUnlock();
+        }}
+      >
         <h1>Acesso restrito</h1>
         <p className="muted">Informe a senha para editar a logo.</p>
         <input
+          ref={pwInputRef}
           type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
+          name="logo-password"
+          autoComplete="off"
+          autoFocus
           placeholder="Senha"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              if (pw === SECRET_PASSWORD) {
-                sessionStorage.setItem(SESSION_KEY, '1');
-                setUnlocked(true);
-              } else {
-                alert('Senha incorreta.');
-              }
-            }
-          }}
         />
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
-          <button
-            className="btn primary"
-            onClick={() => {
-              if (pw === SECRET_PASSWORD) {
-                sessionStorage.setItem(SESSION_KEY, '1');
-                setUnlocked(true);
-              } else {
-                alert('Senha incorreta.');
-              }
-            }}
-          >
+          <button type="submit" className="btn primary">
             Entrar
           </button>
         </div>
-      </div>
+      </form>
     );
   }
 

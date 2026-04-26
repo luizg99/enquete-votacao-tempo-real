@@ -157,10 +157,12 @@ export async function tallySurvey(surveyId: string): Promise<TallyQuestion[]> {
 }
 
 // ---------- Realtime ----------
+function rand() { return Math.random().toString(36).slice(2, 10); }
+
 export function subscribeSurveyVotes(surveyId: string, onChange: () => void) {
   const sb = getSupabase();
   const channel = sb
-    .channel(`votes-${surveyId}`)
+    .channel(`votes-${surveyId}-${rand()}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'votes', filter: `survey_id=eq.${surveyId}` },
@@ -175,7 +177,7 @@ export function subscribeSurveyVotes(surveyId: string, onChange: () => void) {
 export function subscribeSurveyChanges(surveyId: string, onChange: () => void) {
   const sb = getSupabase();
   const channel = sb
-    .channel(`survey-${surveyId}`)
+    .channel(`survey-${surveyId}-${rand()}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'surveys', filter: `id=eq.${surveyId}` }, () => onChange())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'questions', filter: `survey_id=eq.${surveyId}` }, () => onChange())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'answers' }, () => onChange())
@@ -187,8 +189,9 @@ export function subscribeSurveyChanges(surveyId: string, onChange: () => void) {
 
 export function subscribeSurveyList(onChange: () => void) {
   const sb = getSupabase();
+  const name = `surveys-list-${Math.random().toString(36).slice(2, 10)}`;
   const channel = sb
-    .channel('surveys-list')
+    .channel(name)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'surveys' }, () => onChange())
     .subscribe();
   return () => {

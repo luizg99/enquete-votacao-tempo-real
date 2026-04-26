@@ -55,8 +55,9 @@ export async function deleteLogo(): Promise<void> {
 
 export function subscribeBranding(onChange: () => void) {
   const sb = getSupabase();
+  const name = `branding-${Math.random().toString(36).slice(2, 10)}`;
   const channel = sb
-    .channel('branding-singleton')
+    .channel(name)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'branding' }, () => onChange())
     .subscribe();
   return () => { sb.removeChannel(channel); };

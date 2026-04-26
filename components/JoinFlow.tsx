@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Execution, Participant, ExecutionResponse } from '@/lib/types';
 import {
   getExecution,
@@ -12,6 +12,7 @@ import {
   setSingleResponse,
   addMultiResponse,
   removeMultiResponse,
+  setTextResponse,
   subscribeExecution,
   subscribeExecutionResponses,
 } from '@/lib/executions';
@@ -329,6 +330,7 @@ function ParticipantVoteScreen({
     participant_id: participant.id,
     question_id: currentQuestion.id,
     answer_id: answerId,
+    text: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -362,6 +364,8 @@ function ParticipantVoteScreen({
     }
   };
 
+  const isTextQuestion = currentQuestion.type === 'text';
+
   return (
     <div className="join-screen">
       <Header participant={participant} onEdit={onEdit} />
@@ -373,33 +377,156 @@ function ParticipantVoteScreen({
           {execution.title}
         </div>
         <h2>{currentQuestion.text || '(pergunta sem texto)'}</h2>
-        {multi && <small className="muted">Múltipla escolha — selecione quantas quiser</small>}
+        {!isTextQuestion && multi && (
+          <small className="muted">Múltipla escolha — selecione quantas quiser</small>
+        )}
 
-        <div style={{ marginTop: 14 }}>
-          {currentQuestion.answers.length === 0 ? (
-            <div className="empty">Sem respostas configuradas.</div>
-          ) : (
-            currentQuestion.answers.map((a) => {
-              const isSel = selectedIds.has(a.id);
-              return (
-                <label key={a.id} className={`option${isSel ? ' selected' : ''}`}>
-                  <input
-                    type={multi ? 'checkbox' : 'radio'}
-                    name={`q-${currentQuestion.id}`}
-                    checked={isSel}
-                    onChange={() => (multi ? toggleMulti(a.id) : toggleSingle(a.id))}
-                  />
-                  <span>{a.text || '(sem texto)'}</span>
-                </label>
-              );
-            })
-          )}
-        </div>
+        {isTextQuestion ? (
+          <TextResponseField
+            execution={execution}
+            participant={participant}
+            currentQuestionId={currentQuestion.id}
+            responses={responses}
+            setResponses={setResponses}
+            onFailure={handleFailure}
+          />
+        ) : (
+          <>
+            <div style={{ marginTop: 14 }}>
+              {currentQuestion.answers.length === 0 ? (
+                <div className="empty">Sem respostas configuradas.</div>
+              ) : (
+                currentQuestion.answers.map((a) => {
+                  const isSel = selectedIds.has(a.id);
+                  return (
+                    <label key={a.id} className={`option${isSel ? ' selected' : ''}`}>
+                      <input
+                        type={multi ? 'checkbox' : 'radio'}
+                        name={`q-${currentQuestion.id}`}
+                        checked={isSel}
+                        onChange={() => (multi ? toggleMulti(a.id) : toggleSingle(a.id))}
+                      />
+                      <span>{a.text || '(sem texto)'}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
 
-        {selectedIds.size > 0 && (
-          <small className="muted" style={{ display: 'block', marginTop: 8 }}>
-            ✓ Sua resposta foi registrada. Aguarde a próxima pergunta.
-          </small>
+            {selectedIds.size > 0 && (
+              <small className="muted" style={{ display: 'block', marginTop: 8 }}>
+                ✓ Sua resposta foi registrada. Aguarde a próxima pergunta.
+              </small>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TextResponseField({
+  execution,
+  participant,
+  currentQuestionId,
+  responses,
+  setResponses,
+  onFailure,
+}: {
+  execution: Execution;
+  participant: Participant;
+  currentQuestionId: string;
+  responses: ExecutionResponse[];
+  setResponses: React.Dispatch<React.SetStateAction<ExecutionResponse[]>>;
+  onFailure: () => void;
+}) {
+  const existing = useMemo(
+    () => responses.find((r) => r.question_id === currentQuestionId && r.answer_id === null),
+    [responses, currentQuestionId]
+  );
+  const [value, setValue] = useState(existing?.text ?? '');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedRef = useRef<string>(existing?.text ?? '');
+
+  // Reset quando troca de pergunta
+  useEffect(() => {
+    setValue(existing?.text ?? '');
+    lastSavedRef.current = existing?.text ?? '';
+    setStatus('idle');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionId]);
+
+  // Reflete updates do servidor enquanto o usuário NÃO está editando
+  useEffect(() => {
+    if (status !== 'idle') return;
+    const serverText = existing?.text ?? '';
+    if (serverText !== value) setValue(serverText);
+    lastSavedRef.current = serverText;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing?.text]);
+
+  const persist = (text: string) => {
+    if (text === lastSavedRef.current) return;
+    setStatus('saving');
+    // Otimista: atualiza linha local
+    setResponses((prev) => {
+      const others = prev.filter(
+        (r) => !(r.question_id === currentQuestionId && r.answer_id === null)
+      );
+      if (text.trim() === '') return others;
+      return [
+        ...others,
+        {
+          id: -Date.now() - Math.floor(Math.random() * 1000),
+          execution_id: execution.id,
+          participant_id: participant.id,
+          question_id: currentQuestionId,
+          answer_id: null,
+          text,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+    });
+    setTextResponse(execution.id, participant.id, currentQuestionId, text)
+      .then(() => {
+        lastSavedRef.current = text;
+        setStatus('saved');
+      })
+      .catch(() => {
+        setStatus('idle');
+        onFailure();
+      });
+  };
+
+  const onChange = (next: string) => {
+    setValue(next);
+    setStatus('idle');
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => persist(next), 800);
+  };
+
+  const onBlur = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    persist(value);
+  };
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <textarea
+        className="text-response"
+        value={value}
+        placeholder="Escreva sua resposta…"
+        rows={6}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+      />
+      <div className="text-response-status">
+        {status === 'saving' && <span className="muted">Salvando…</span>}
+        {status === 'saved' && <span className="muted">✓ Resposta salva</span>}
+        {status === 'idle' && value && lastSavedRef.current !== value && (
+          <span className="muted">Editando — salva ao parar de digitar</span>
         )}
       </div>
     </div>

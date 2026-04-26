@@ -292,6 +292,27 @@ input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset:
   margin-bottom: 12px; font-size: 14px;
 }
 
+/* ----------------- Resposta dissertativa ----------------- */
+.text-response {
+  width: 100%; min-height: 140px;
+  padding: 12px; font-size: 15px; line-height: 1.5;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: inherit; resize: vertical; background: #fff;
+}
+.text-response:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary); }
+.text-response-status { margin-top: 6px; font-size: 13px; min-height: 18px; }
+
+.run-texts {
+  margin-top: 18px; max-height: 60vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.text-card {
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+}
+.text-card-author { font-size: 13px; margin-bottom: 4px; }
+.text-card-body { white-space: pre-wrap; font-size: 15px; line-height: 1.45; }
+
 /* ----------------- Logo Editor ----------------- */
 .logo-preview {
   background: #f1f5f9; border: 2px dashed var(--border);

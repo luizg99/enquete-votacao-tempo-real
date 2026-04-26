@@ -6,10 +6,13 @@ export type Answer = {
   votes?: number;
 };
 
+export type QuestionType = 'options' | 'text';
+
 export type Question = {
   id: string;
   survey_id: string;
   text: string;
+  type: QuestionType;
   position: number;
   answers: Answer[];
 };
@@ -30,12 +33,29 @@ export type TallyAnswer = {
   pct: number;
 };
 
-export type TallyQuestion = {
-  id: string;
+export type TextResponse = {
+  participantId: string;
+  participantName: string;
+  participantCompany: string;
   text: string;
-  total: number;
-  answers: TallyAnswer[];
+  updatedAt: string;
 };
+
+export type TallyQuestion =
+  | {
+      id: string;
+      text: string;
+      type: 'options';
+      total: number;
+      answers: TallyAnswer[];
+    }
+  | {
+      id: string;
+      text: string;
+      type: 'text';
+      total: number;
+      texts: TextResponse[];
+    };
 
 // ---------- Execuções ----------
 export type ExecutionStatus = 'draft' | 'running' | 'finished';
@@ -69,7 +89,8 @@ export type ExecutionResponse = {
   execution_id: string;
   participant_id: string;
   question_id: string;
-  answer_id: string;
+  answer_id: string | null;
+  text: string | null;
   created_at: string;
   updated_at: string;
 };

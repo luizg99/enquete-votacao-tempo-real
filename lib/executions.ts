@@ -266,6 +266,24 @@ export async function removeMultiResponse(
   });
 }
 
+export async function setTextResponse(
+  executionId: string,
+  participantId: string,
+  questionId: string,
+  text: string
+) {
+  return withRetry(async () => {
+    const sb = getSupabase();
+    const { error } = await sb.rpc('set_text_response', {
+      p_exec: executionId,
+      p_part: participantId,
+      p_q: questionId,
+      p_text: text,
+    });
+    if (error) throw error;
+  });
+}
+
 export async function tallyExecution(executionId: string): Promise<TallyQuestion[]> {
   const sb = getSupabase();
   const exec = await getExecution(executionId);
@@ -273,25 +291,47 @@ export async function tallyExecution(executionId: string): Promise<TallyQuestion
 
   const { data, error } = await sb
     .from('execution_responses')
-    .select('question_id, answer_id')
+    .select('question_id, answer_id, text, participant_id, updated_at, participants(full_name, company)')
     .eq('execution_id', executionId);
   if (error) throw error;
 
-  const counts = new Map<string, number>(); // key: answer_id
+  const optCounts = new Map<string, number>(); // answer_id -> votes
+  const textsByQ = new Map<string, any[]>(); // question_id -> list of rows
   (data ?? []).forEach((r: any) => {
-    counts.set(r.answer_id, (counts.get(r.answer_id) ?? 0) + 1);
+    if (r.answer_id) {
+      optCounts.set(r.answer_id, (optCounts.get(r.answer_id) ?? 0) + 1);
+    } else if (r.text) {
+      const arr = textsByQ.get(r.question_id) ?? [];
+      arr.push(r);
+      textsByQ.set(r.question_id, arr);
+    }
   });
 
-  return exec.survey.questions.map((q) => {
+  return exec.survey.questions.map((q): TallyQuestion => {
+    if (q.type === 'text') {
+      const rows = textsByQ.get(q.id) ?? [];
+      const texts = rows
+        .map((r) => ({
+          participantId: r.participant_id,
+          participantName: r.participants?.full_name ?? '—',
+          participantCompany: r.participants?.company ?? '',
+          text: r.text ?? '',
+          updatedAt: r.updated_at,
+        }))
+        .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+      return { id: q.id, text: q.text, type: 'text', total: texts.length, texts };
+    }
+
     const answers = q.answers.map((a) => ({
       id: a.id,
       text: a.text,
-      votes: counts.get(a.id) ?? 0,
+      votes: optCounts.get(a.id) ?? 0,
     }));
     const total = answers.reduce((s, a) => s + a.votes, 0);
     return {
       id: q.id,
       text: q.text,
+      type: 'options',
       total,
       answers: answers.map((a) => ({
         ...a,

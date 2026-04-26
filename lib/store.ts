@@ -65,14 +65,17 @@ export async function addQuestion(surveyId: string, text = ''): Promise<Question
   const position = count ?? 0;
   const { data, error } = await sb
     .from('questions')
-    .insert({ id, survey_id: surveyId, text, position })
+    .insert({ id, survey_id: surveyId, text, position, type: 'options' })
     .select()
     .single();
   if (error) throw error;
-  return { ...(data as any), answers: [] } as Question;
+  return { ...(data as any), type: (data as any).type ?? 'options', answers: [] } as Question;
 }
 
-export async function updateQuestion(id: string, patch: Partial<Pick<Question, 'text'>>) {
+export async function updateQuestion(
+  id: string,
+  patch: Partial<Pick<Question, 'text' | 'type'>>
+) {
   const sb = getSupabase();
   const { error } = await sb.from('questions').update(patch).eq('id', id);
   if (error) throw error;
@@ -147,6 +150,7 @@ export async function tallySurvey(surveyId: string): Promise<TallyQuestion[]> {
     return {
       id: q.id,
       text: q.text,
+      type: 'options' as const,
       total,
       answers: answers.map((a) => ({
         ...a,
@@ -207,6 +211,7 @@ function normalizeSurvey(row: any): Survey {
       id: q.id,
       survey_id: q.survey_id,
       text: q.text,
+      type: (q.type as Question['type']) ?? 'options',
       position: q.position ?? 0,
       answers: (q.answers ?? [])
         .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))

@@ -72,7 +72,7 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
     );
   }
 
-  const valid = survey.questions.filter((q) => q.answers.length > 0);
+  const valid = survey.questions.filter((q) => q.type !== 'text' && q.answers.length > 0);
   if (valid.length === 0) {
     return <div className="empty">Esta enquete ainda não possui perguntas com respostas.</div>;
   }

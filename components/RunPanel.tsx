@@ -130,26 +130,57 @@ export function RunPanel({ executionId }: { executionId: string }) {
             <div className="run-graph-inner">
               <div className="run-question-meta">
                 Pergunta {currentIdx + 1} de {questions.length}
+                {currentQuestion.type === 'text' && ' · dissertativa'}
               </div>
               <h2 className="run-question-text">{currentQuestion.text || '(sem texto)'}</h2>
-              <small className="muted">Total de votos: {currentTally?.total ?? 0}</small>
-              <div className="run-bars">
-                {currentQuestion.answers.length === 0 ? (
-                  <div className="empty" style={{ padding: 20, marginTop: 10 }}>
-                    Pergunta sem respostas configuradas.
-                  </div>
-                ) : (
-                  (currentTally?.answers ?? currentQuestion.answers.map((a) => ({
-                    id: a.id, text: a.text, votes: 0, pct: 0,
-                  }))).map((a) => (
-                    <div key={a.id} className="bar-row big">
-                      <div className="label">{a.text || '(sem texto)'}</div>
-                      <div className="bar"><div style={{ width: `${a.pct}%` }} /></div>
-                      <div className="count">{a.votes} · {a.pct}%</div>
+              <small className="muted">
+                {currentQuestion.type === 'text'
+                  ? `${currentTally?.total ?? 0} resposta(s) recebida(s)`
+                  : `Total de votos: ${currentTally?.total ?? 0}`}
+              </small>
+
+              {currentQuestion.type === 'text' ? (
+                <div className="run-texts">
+                  {currentTally && currentTally.type === 'text' && currentTally.texts.length > 0 ? (
+                    currentTally.texts.map((t) => (
+                      <div key={t.participantId} className="text-card">
+                        <div className="text-card-author">
+                          <strong>{t.participantName}</strong>
+                          {t.participantCompany && (
+                            <small className="muted"> · {t.participantCompany}</small>
+                          )}
+                        </div>
+                        <div className="text-card-body">{t.text}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty" style={{ padding: 20, marginTop: 10 }}>
+                      Aguardando respostas dos participantes…
                     </div>
-                  ))
-                )}
-              </div>
+                  )}
+                </div>
+              ) : (
+                <div className="run-bars">
+                  {currentQuestion.answers.length === 0 ? (
+                    <div className="empty" style={{ padding: 20, marginTop: 10 }}>
+                      Pergunta sem respostas configuradas.
+                    </div>
+                  ) : (
+                    (currentTally && currentTally.type === 'options'
+                      ? currentTally.answers
+                      : currentQuestion.answers.map((a) => ({
+                          id: a.id, text: a.text, votes: 0, pct: 0,
+                        }))
+                    ).map((a) => (
+                      <div key={a.id} className="bar-row big">
+                        <div className="label">{a.text || '(sem texto)'}</div>
+                        <div className="bar"><div style={{ width: `${a.pct}%` }} /></div>
+                        <div className="count">{a.votes} · {a.pct}%</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           )}
         </section>

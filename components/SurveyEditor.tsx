@@ -121,10 +121,22 @@ function QuestionBlock({
   surveyId: string;
   question: Survey['questions'][number];
 }) {
+  const isText = question.type === 'text';
   return (
     <div className="question-block">
       <div className="row">
         <QuestionTextInput question={question} />
+        <select
+          className="select"
+          style={{ maxWidth: 220 }}
+          value={question.type}
+          onChange={(e) =>
+            updateQuestion(question.id, { type: e.target.value as 'options' | 'text' })
+          }
+        >
+          <option value="options">Múltipla escolha</option>
+          <option value="text">Resposta dissertativa</option>
+        </select>
         <button
           className="btn danger"
           onClick={() => {
@@ -135,26 +147,34 @@ function QuestionBlock({
         </button>
       </div>
 
-      <div>
-        {question.answers.map((a) => (
-          <div key={a.id} className="answer-row">
-            <AnswerTextInput answer={a} />
-            <button
-              className="btn icon danger"
-              title="Excluir resposta"
-              onClick={() => removeAnswer(a.id)}
-            >
-              🗑
+      {isText ? (
+        <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+          Pergunta dissertativa — o participante digitará a resposta livremente. Sem opções a cadastrar.
+        </div>
+      ) : (
+        <>
+          <div>
+            {question.answers.map((a) => (
+              <div key={a.id} className="answer-row">
+                <AnswerTextInput answer={a} />
+                <button
+                  className="btn icon danger"
+                  title="Excluir resposta"
+                  onClick={() => removeAnswer(a.id)}
+                >
+                  🗑
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <button className="btn" onClick={() => addAnswer(question.id, '')}>
+              + Adicionar resposta
             </button>
           </div>
-        ))}
-      </div>
-
-      <div style={{ marginTop: 10 }}>
-        <button className="btn" onClick={() => addAnswer(question.id, '')}>
-          + Adicionar resposta
-        </button>
-      </div>
+        </>
+      )}
     </div>
   );
 }

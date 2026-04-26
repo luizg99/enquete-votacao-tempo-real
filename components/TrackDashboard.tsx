@@ -75,30 +75,33 @@ export function TrackDashboard({ surveyId }: { surveyId: string }) {
         <div className="empty">Esta enquete ainda não possui perguntas.</div>
       )}
 
-      {tally.map((q, idx) => (
-        <div key={q.id} className="card track-question">
-          <h2>{idx + 1}. {q.text || '(sem texto)'}</h2>
-          <small className="muted">Total de votos: {q.total}</small>
+      {tally.map((q, idx) => {
+        if (q.type !== 'options') return null;
+        return (
+          <div key={q.id} className="card track-question">
+            <h2>{idx + 1}. {q.text || '(sem texto)'}</h2>
+            <small className="muted">Total de votos: {q.total}</small>
 
-          {q.answers.length === 0 ? (
-            <div className="empty" style={{ padding: 20, marginTop: 10 }}>
-              Sem respostas configuradas.
-            </div>
-          ) : (
-            <div style={{ marginTop: 14 }}>
-              {q.answers.map((a) => (
-                <div key={a.id} className="bar-row">
-                  <div className="label">{a.text || '(sem texto)'}</div>
-                  <div className="bar">
-                    <div style={{ width: `${a.pct}%` }} />
+            {q.answers.length === 0 ? (
+              <div className="empty" style={{ padding: 20, marginTop: 10 }}>
+                Sem respostas configuradas.
+              </div>
+            ) : (
+              <div style={{ marginTop: 14 }}>
+                {q.answers.map((a) => (
+                  <div key={a.id} className="bar-row">
+                    <div className="label">{a.text || '(sem texto)'}</div>
+                    <div className="bar">
+                      <div style={{ width: `${a.pct}%` }} />
+                    </div>
+                    <div className="count">{a.votes} voto(s) · {a.pct}%</div>
                   </div>
-                  <div className="count">{a.votes} voto(s) · {a.pct}%</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

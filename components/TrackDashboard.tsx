@@ -9,6 +9,8 @@ import {
   subscribeSurveyVotes,
   subscribeSurveyChanges,
 } from '@/lib/store';
+import { loadSurveyReport } from '@/lib/reports';
+import { ExportButtons } from './ExportButtons';
 
 export function TrackDashboard({ surveyId }: { surveyId: string }) {
   const [survey, setSurvey] = useState<Survey | null>(null);
@@ -56,6 +58,7 @@ export function TrackDashboard({ surveyId }: { surveyId: string }) {
           </small>
         </div>
         <div className="spacer" />
+        <ExportButtons load={() => loadSurveyReport(surveyId)} />
         <Link href="/admin" className="btn">← Admin</Link>
         <Link href={`/qr?id=${surveyId}`} className="btn primary">QR Code</Link>
       </div>

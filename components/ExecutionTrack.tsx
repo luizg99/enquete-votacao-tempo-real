@@ -12,6 +12,8 @@ import {
   subscribeParticipants,
 } from '@/lib/executions';
 import { subscribeSurveyChanges } from '@/lib/store';
+import { loadExecutionReport } from '@/lib/reports';
+import { ExportButtons } from './ExportButtons';
 
 export function ExecutionTrack({ executionId }: { executionId: string }) {
   const [exec, setExec] = useState<Execution | null>(null);
@@ -72,6 +74,7 @@ export function ExecutionTrack({ executionId }: { executionId: string }) {
           </small>
         </div>
         <div className="spacer" />
+        <ExportButtons load={() => loadExecutionReport(executionId)} />
         <Link href="/executions" className="btn">← Voltar</Link>
         {exec.status !== 'finished' && (
           <Link href={`/executions/run?id=${executionId}`} className="btn primary">

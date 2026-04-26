@@ -13,6 +13,7 @@ export type Question = {
   survey_id: string;
   text: string;
   type: QuestionType;
+  show_text_in_run: boolean;
   position: number;
   answers: Answer[];
 };

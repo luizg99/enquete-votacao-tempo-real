@@ -140,25 +140,32 @@ export function RunPanel({ executionId }: { executionId: string }) {
               </small>
 
               {currentQuestion.type === 'text' ? (
-                <div className="run-texts">
-                  {currentTally && currentTally.type === 'text' && currentTally.texts.length > 0 ? (
-                    currentTally.texts.map((t) => (
-                      <div key={t.participantId} className="text-card">
-                        <div className="text-card-author">
-                          <strong>{t.participantName}</strong>
-                          {t.participantCompany && (
-                            <small className="muted"> · {t.participantCompany}</small>
-                          )}
+                currentQuestion.show_text_in_run ? (
+                  <div className="run-texts">
+                    {currentTally && currentTally.type === 'text' && currentTally.texts.length > 0 ? (
+                      currentTally.texts.map((t) => (
+                        <div key={t.participantId} className="text-card">
+                          <div className="text-card-author">
+                            <strong>{t.participantName}</strong>
+                            {t.participantCompany && (
+                              <small className="muted"> · {t.participantCompany}</small>
+                            )}
+                          </div>
+                          <div className="text-card-body">{t.text}</div>
                         </div>
-                        <div className="text-card-body">{t.text}</div>
+                      ))
+                    ) : (
+                      <div className="empty" style={{ padding: 20, marginTop: 10 }}>
+                        Aguardando respostas dos participantes…
                       </div>
-                    ))
-                  ) : (
-                    <div className="empty" style={{ padding: 20, marginTop: 10 }}>
-                      Aguardando respostas dos participantes…
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="empty" style={{ padding: 30, marginTop: 14 }}>
+                    Respostas ocultas durante a execução.<br />
+                    {currentTally?.total ?? 0} resposta(s) recebida(s) — disponíveis no relatório.
+                  </div>
+                )
               ) : (
                 <div className="run-bars">
                   {currentQuestion.answers.length === 0 ? (

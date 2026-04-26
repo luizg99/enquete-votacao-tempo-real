@@ -148,9 +148,26 @@ function QuestionBlock({
       </div>
 
       {isText ? (
-        <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
-          Pergunta dissertativa — o participante digitará a resposta livremente. Sem opções a cadastrar.
-        </div>
+        <>
+          <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+            Pergunta dissertativa — o participante digitará a resposta livremente. Sem opções a cadastrar.
+          </div>
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer' }}
+          >
+            <input
+              type="checkbox"
+              checked={question.show_text_in_run}
+              onChange={(e) =>
+                updateQuestion(question.id, { show_text_in_run: e.target.checked })
+              }
+            />
+            <span>Mostrar respostas no painel da execução (palco)</span>
+          </label>
+          <small className="muted" style={{ display: 'block', marginLeft: 26 }}>
+            Mesmo desativado, as respostas sempre aparecem no relatório de acompanhamento.
+          </small>
+        </>
       ) : (
         <>
           <div>

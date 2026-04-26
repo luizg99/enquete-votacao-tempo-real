@@ -65,16 +65,21 @@ export async function addQuestion(surveyId: string, text = ''): Promise<Question
   const position = count ?? 0;
   const { data, error } = await sb
     .from('questions')
-    .insert({ id, survey_id: surveyId, text, position, type: 'options' })
+    .insert({ id, survey_id: surveyId, text, position, type: 'options', show_text_in_run: true })
     .select()
     .single();
   if (error) throw error;
-  return { ...(data as any), type: (data as any).type ?? 'options', answers: [] } as Question;
+  return {
+    ...(data as any),
+    type: (data as any).type ?? 'options',
+    show_text_in_run: (data as any).show_text_in_run ?? true,
+    answers: [],
+  } as Question;
 }
 
 export async function updateQuestion(
   id: string,
-  patch: Partial<Pick<Question, 'text' | 'type'>>
+  patch: Partial<Pick<Question, 'text' | 'type' | 'show_text_in_run'>>
 ) {
   const sb = getSupabase();
   const { error } = await sb.from('questions').update(patch).eq('id', id);
@@ -126,6 +131,14 @@ export async function registerVote(surveyId: string, questionId: string, answerI
   if (error) throw error;
 }
 
+export async function registerTextVote(surveyId: string, questionId: string, text: string) {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from('votes')
+    .insert({ survey_id: surveyId, question_id: questionId, answer_id: null, text });
+  if (error) throw error;
+}
+
 export async function tallySurvey(surveyId: string): Promise<TallyQuestion[]> {
   const sb = getSupabase();
   const survey = await getSurvey(surveyId);
@@ -137,10 +150,37 @@ export async function tallySurvey(surveyId: string): Promise<TallyQuestion[]> {
     .eq('survey_id', surveyId);
   if (error) throw error;
 
+  const { data: textRows, error: textErr } = await sb
+    .from('votes')
+    .select('id, question_id, text, created_at')
+    .eq('survey_id', surveyId)
+    .not('text', 'is', null);
+  if (textErr) throw textErr;
+
   const voteByAnswer = new Map<string, number>();
   (tally ?? []).forEach((t: any) => voteByAnswer.set(t.answer_id, Number(t.votes) || 0));
 
-  return survey.questions.map((q) => {
+  const textsByQ = new Map<string, any[]>();
+  (textRows ?? []).forEach((r: any) => {
+    const arr = textsByQ.get(r.question_id) ?? [];
+    arr.push(r);
+    textsByQ.set(r.question_id, arr);
+  });
+
+  return survey.questions.map((q): TallyQuestion => {
+    if (q.type === 'text') {
+      const rows = textsByQ.get(q.id) ?? [];
+      const texts = rows
+        .map((r) => ({
+          participantId: String(r.id),
+          participantName: 'Anônimo',
+          participantCompany: '',
+          text: r.text ?? '',
+          updatedAt: r.created_at,
+        }))
+        .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+      return { id: q.id, text: q.text, type: 'text', total: texts.length, texts };
+    }
     const answers = q.answers.map((a) => ({
       id: a.id,
       text: a.text,
@@ -150,7 +190,7 @@ export async function tallySurvey(surveyId: string): Promise<TallyQuestion[]> {
     return {
       id: q.id,
       text: q.text,
-      type: 'options' as const,
+      type: 'options',
       total,
       answers: answers.map((a) => ({
         ...a,
@@ -212,6 +252,7 @@ function normalizeSurvey(row: any): Survey {
       survey_id: q.survey_id,
       text: q.text,
       type: (q.type as Question['type']) ?? 'options',
+      show_text_in_run: q.show_text_in_run ?? true,
       position: q.position ?? 0,
       answers: (q.answers ?? [])
         .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))

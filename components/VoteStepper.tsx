@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Survey } from '@/lib/types';
-import { getSurvey, registerVote } from '@/lib/store';
+import { getSurvey, registerVote, registerTextVote } from '@/lib/store';
 import { hasVoted, markVoted } from '@/lib/voter';
 
 export function VoteStepper({ surveyId }: { surveyId: string }) {
@@ -11,6 +11,7 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [selections, setSelections] = useState<Map<string, string[]>>(new Map());
+  const [textAnswers, setTextAnswers] = useState<Map<string, string>>(new Map());
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [alreadyVoted, setAlreadyVoted] = useState(false);
@@ -35,7 +36,6 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   if (error) return <div className="card" style={{ color: '#dc2626' }}>{error}</div>;
   if (!survey) return <div className="empty">Enquete não encontrada.</div>;
 
-  // Já respondeu e a enquete permite só um voto → bloqueia
   if (alreadyVoted && !submitted && survey.single_vote_per_device) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 40 }}>
@@ -45,7 +45,6 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
     );
   }
 
-  // Já respondeu, mas a enquete permite múltiplos votos → pergunta
   if (alreadyVoted && !submitted && !confirmedRevote && !declinedRevote) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 40 }}>
@@ -72,9 +71,11 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
     );
   }
 
-  const valid = survey.questions.filter((q) => q.type !== 'text' && q.answers.length > 0);
+  const valid = survey.questions.filter(
+    (q) => q.type === 'text' || q.answers.length > 0
+  );
   if (valid.length === 0) {
-    return <div className="empty">Esta enquete ainda não possui perguntas com respostas.</div>;
+    return <div className="empty">Esta enquete ainda não possui perguntas válidas.</div>;
   }
 
   if (submitted) {
@@ -89,8 +90,10 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   const q = valid[step];
   const progressPct = Math.round(((step + 1) / valid.length) * 100);
   const selectedIds = selections.get(q.id) ?? [];
+  const textValue = textAnswers.get(q.id) ?? '';
   const multi = survey.allow_multiple_choices;
-  const canGo = selectedIds.length > 0;
+  const isText = q.type === 'text';
+  const canGo = isText ? textValue.trim().length > 0 : selectedIds.length > 0;
   const isLast = step === valid.length - 1;
 
   const toggleAnswer = (answerId: string) => {
@@ -107,12 +110,19 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
     setSelections(next);
   };
 
+  const updateText = (text: string) => {
+    const next = new Map(textAnswers);
+    next.set(q.id, text);
+    setTextAnswers(next);
+  };
+
   return (
     <div className="vote-wrapper">
       <h1>{survey.title || 'Enquete'}</h1>
       <div className="stepper">
         Pergunta {step + 1} de {valid.length}
-        {multi && <span> · múltipla escolha</span>}
+        {!isText && multi && <span> · múltipla escolha</span>}
+        {isText && <span> · dissertativa</span>}
       </div>
       <div className="progress">
         <div style={{ width: `${progressPct}%` }} />
@@ -121,23 +131,33 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
       <div className="card">
         <h2>{q.text || '(pergunta sem texto)'}</h2>
 
-        {q.answers.map((a) => {
-          const isSelected = selectedIds.includes(a.id);
-          return (
-            <label
-              key={a.id}
-              className={`option${isSelected ? ' selected' : ''}`}
-            >
-              <input
-                type={multi ? 'checkbox' : 'radio'}
-                name={`q-${q.id}`}
-                checked={isSelected}
-                onChange={() => toggleAnswer(a.id)}
-              />
-              <span>{a.text || '(sem texto)'}</span>
-            </label>
-          );
-        })}
+        {isText ? (
+          <textarea
+            className="text-response"
+            value={textValue}
+            placeholder="Escreva sua resposta…"
+            rows={6}
+            onChange={(e) => updateText(e.target.value)}
+          />
+        ) : (
+          q.answers.map((a) => {
+            const isSelected = selectedIds.includes(a.id);
+            return (
+              <label
+                key={a.id}
+                className={`option${isSelected ? ' selected' : ''}`}
+              >
+                <input
+                  type={multi ? 'checkbox' : 'radio'}
+                  name={`q-${q.id}`}
+                  checked={isSelected}
+                  onChange={() => toggleAnswer(a.id)}
+                />
+                <span>{a.text || '(sem texto)'}</span>
+              </label>
+            );
+          })
+        )}
 
         <div className="row" style={{ marginTop: 16 }}>
           <button
@@ -160,6 +180,9 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
                     for (const aId of aIds) {
                       await registerVote(survey.id, qId, aId);
                     }
+                  }
+                  for (const [qId, txt] of textAnswers) {
+                    if (txt.trim()) await registerTextVote(survey.id, qId, txt.trim());
                   }
                   markVoted(survey.id);
                   setSubmitted(true);

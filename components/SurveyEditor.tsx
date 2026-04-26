@@ -75,7 +75,11 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
       </label>
 
       <div style={{ marginTop: 16 }}>
-        <h3>Perguntas</h3>
+        <div className="row" style={{ alignItems: 'flex-end' }}>
+          <h3 style={{ margin: 0 }}>Perguntas</h3>
+          <div className="spacer" />
+          <ImportButtons survey={survey} />
+        </div>
         {survey.questions.map((q) => (
           <QuestionBlock key={q.id} surveyId={survey.id} question={q} />
         ))}
@@ -86,6 +90,73 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
         </div>
       </div>
     </div>
+  );
+}
+
+function ImportButtons({ survey }: { survey: Survey }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<'template' | 'import' | null>(null);
+
+  const handleTemplate = async () => {
+    setBusy('template');
+    try {
+      const { downloadTemplate } = await import('@/lib/excelImport');
+      await downloadTemplate();
+    } catch (e: any) {
+      alert('Erro ao gerar planilha: ' + (e.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleImportClick = () => {
+    if (survey.questions.length > 0) {
+      alert(
+        `Esta enquete já tem ${survey.questions.length} pergunta(s) cadastrada(s). ` +
+          'Exclua todas as perguntas antes de importar.'
+      );
+      return;
+    }
+    fileRef.current?.click();
+  };
+
+  const handleFile = async (file: File) => {
+    setBusy('import');
+    try {
+      const { parseQuestionsFile, importQuestionsToSurvey } = await import('@/lib/excelImport');
+      const parsed = await parseQuestionsFile(file);
+      if (!confirm(`Importar ${parsed.length} pergunta(s) na enquete?`)) {
+        return;
+      }
+      const n = await importQuestionsToSurvey(survey.id, parsed);
+      alert(`✓ ${n} pergunta(s) importada(s).`);
+    } catch (e: any) {
+      alert('Erro ao importar: ' + (e.message ?? e));
+    } finally {
+      setBusy(null);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+        }}
+      />
+      <button className="btn" disabled={!!busy} onClick={handleTemplate}>
+        {busy === 'template' ? 'Gerando…' : '⬇ PlanilhaModelo.xlsx'}
+      </button>
+      <button className="btn" disabled={!!busy} onClick={handleImportClick}>
+        {busy === 'import' ? 'Importando…' : '⬆ Importar perguntas'}
+      </button>
+    </>
   );
 }
 

@@ -1,12 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Survey } from '@/lib/types';
-import { getSurvey, registerVote, registerTextVote } from '@/lib/store';
+import type { Survey, SurveyVoter } from '@/lib/types';
+import {
+  getSurvey,
+  registerVote,
+  registerTextVote,
+  findSurveyVoter,
+  getSurveyVoter,
+  createSurveyVoter,
+  updateSurveyVoter,
+} from '@/lib/store';
 import { hasVoted, markVoted } from '@/lib/voter';
+import {
+  getDeviceId,
+  getCachedSurveyVoterId,
+  setCachedSurveyVoterId,
+} from '@/lib/device';
 
 export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [survey, setSurvey] = useState<Survey | null>(null);
+  const [voter, setVoter] = useState<SurveyVoter | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
@@ -17,6 +31,7 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
   const [alreadyVoted, setAlreadyVoted] = useState(false);
   const [confirmedRevote, setConfirmedRevote] = useState(false);
   const [declinedRevote, setDeclinedRevote] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -24,6 +39,18 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
         const s = await getSurvey(surveyId);
         setSurvey(s);
         setAlreadyVoted(hasVoted(surveyId));
+
+        if (s) {
+          const deviceId = getDeviceId();
+          let v: SurveyVoter | null = null;
+          const cached = getCachedSurveyVoterId(surveyId);
+          if (cached) v = await getSurveyVoter(cached);
+          if (!v) {
+            v = await findSurveyVoter(surveyId, deviceId);
+            if (v) setCachedSurveyVoterId(surveyId, v.id);
+          }
+          setVoter(v);
+        }
       } catch (e: any) {
         setError(e.message ?? String(e));
       } finally {
@@ -68,6 +95,33 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
         <h1>✓ Obrigado pela participação!</h1>
         <p className="muted">Sua resposta anterior já foi registrada.</p>
       </div>
+    );
+  }
+
+  // Cadastro do votante (primeira vez ou edição)
+  if (!voter) {
+    return (
+      <VoterForm
+        surveyId={surveyId}
+        onSaved={(v) => {
+          setVoter(v);
+          setCachedSurveyVoterId(surveyId, v.id);
+        }}
+      />
+    );
+  }
+
+  if (showEdit) {
+    return (
+      <VoterForm
+        surveyId={surveyId}
+        initial={voter}
+        onSaved={(v) => {
+          setVoter(v);
+          setShowEdit(false);
+        }}
+        onCancel={() => setShowEdit(false)}
+      />
     );
   }
 
@@ -118,6 +172,16 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
 
   return (
     <div className="vote-wrapper">
+      <div className="join-header">
+        <div>
+          <strong>{voter.full_name}</strong>
+          <small className="muted"> · {voter.company}</small>
+        </div>
+        <button className="btn ghost" onClick={() => setShowEdit(true)}>
+          Editar informações
+        </button>
+      </div>
+
       <h1>{survey.title || 'Enquete'}</h1>
       <div className="stepper">
         Pergunta {step + 1} de {valid.length}
@@ -178,11 +242,11 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
                 try {
                   for (const [qId, aIds] of selections) {
                     for (const aId of aIds) {
-                      await registerVote(survey.id, qId, aId);
+                      await registerVote(survey.id, qId, aId, voter.id);
                     }
                   }
                   for (const [qId, txt] of textAnswers) {
-                    if (txt.trim()) await registerTextVote(survey.id, qId, txt.trim());
+                    if (txt.trim()) await registerTextVote(survey.id, qId, txt.trim(), voter.id);
                   }
                   markVoted(survey.id);
                   setSubmitted(true);
@@ -204,6 +268,97 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
               Próxima →
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Cadastro / edição do votante ----------
+function VoterForm({
+  surveyId,
+  initial,
+  onSaved,
+  onCancel,
+}: {
+  surveyId: string;
+  initial?: SurveyVoter;
+  onSaved: (v: SurveyVoter) => void;
+  onCancel?: () => void;
+}) {
+  const [company, setCompany] = useState(initial?.company ?? '');
+  const [fullName, setFullName] = useState(initial?.full_name ?? '');
+  const [phone, setPhone] = useState(initial?.phone ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!company.trim() || !fullName.trim() || !phone.trim()) {
+      alert('Preencha todos os campos.');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (initial) {
+        await updateSurveyVoter(initial.id, {
+          company: company.trim(),
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+        });
+        onSaved({
+          ...initial,
+          company: company.trim(),
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+        });
+      } else {
+        const deviceId = getDeviceId();
+        const v = await createSurveyVoter({
+          survey_id: surveyId,
+          device_id: deviceId,
+          company: company.trim(),
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+        });
+        onSaved(v);
+      }
+    } catch (e: any) {
+      alert('Erro ao salvar: ' + (e.message ?? e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="join-form">
+      <div className="card">
+        <h1>{initial ? 'Editar informações' : 'Bem-vindo!'}</h1>
+        <p className="muted">
+          {initial
+            ? 'Corrija seus dados abaixo.'
+            : 'Preencha seus dados para responder esta enquete.'}
+        </p>
+
+        <label className="muted" style={{ marginTop: 12, display: 'block' }}>Nome da Empresa</label>
+        <input type="text" value={company} onChange={(e) => setCompany(e.target.value)} />
+
+        <label className="muted" style={{ marginTop: 12, display: 'block' }}>Nome Completo</label>
+        <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+
+        <label className="muted" style={{ marginTop: 12, display: 'block' }}>Telefone</label>
+        <input
+          type="text"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="(11) 99999-9999"
+        />
+
+        <div className="row" style={{ marginTop: 18, justifyContent: 'flex-end' }}>
+          {onCancel && (
+            <button className="btn ghost" onClick={onCancel}>Cancelar</button>
+          )}
+          <button className="btn primary" disabled={saving} onClick={submit}>
+            {saving ? 'Salvando…' : initial ? 'Salvar alterações' : 'Continuar para a enquete'}
+          </button>
         </div>
       </div>
     </div>

@@ -122,20 +122,100 @@ export async function removeAnswer(id: string) {
   if (error) throw error;
 }
 
-// ---------- Votes ----------
-export async function registerVote(surveyId: string, questionId: string, answerId: string) {
+// ---------- Survey voters (legacy /vote) ----------
+import type { SurveyVoter } from './types';
+
+export async function findSurveyVoter(
+  surveyId: string,
+  deviceId: string
+): Promise<SurveyVoter | null> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from('survey_voters')
+    .select('*')
+    .eq('survey_id', surveyId)
+    .eq('device_id', deviceId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as SurveyVoter) ?? null;
+}
+
+export async function getSurveyVoter(id: string): Promise<SurveyVoter | null> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from('survey_voters')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as SurveyVoter) ?? null;
+}
+
+export async function createSurveyVoter(input: {
+  survey_id: string;
+  device_id: string;
+  company: string;
+  full_name: string;
+  phone: string;
+}): Promise<SurveyVoter> {
+  const sb = getSupabase();
+  const id = uid('sv');
+  const { data, error } = await sb
+    .from('survey_voters')
+    .insert({ id, ...input })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as SurveyVoter;
+}
+
+export async function updateSurveyVoter(
+  id: string,
+  patch: Partial<Pick<SurveyVoter, 'company' | 'full_name' | 'phone'>>
+) {
   const sb = getSupabase();
   const { error } = await sb
-    .from('votes')
-    .insert({ survey_id: surveyId, question_id: questionId, answer_id: answerId });
+    .from('survey_voters')
+    .update({ ...patch, last_seen_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
 }
 
-export async function registerTextVote(surveyId: string, questionId: string, text: string) {
+// ---------- Votes ----------
+export async function registerVote(
+  surveyId: string,
+  questionId: string,
+  answerId: string,
+  voterId?: string | null
+) {
   const sb = getSupabase();
   const { error } = await sb
     .from('votes')
-    .insert({ survey_id: surveyId, question_id: questionId, answer_id: null, text });
+    .insert({
+      survey_id: surveyId,
+      question_id: questionId,
+      answer_id: answerId,
+      voter_id: voterId ?? null,
+    });
+  if (error) throw error;
+}
+
+export async function registerTextVote(
+  surveyId: string,
+  questionId: string,
+  text: string,
+  voterId?: string | null
+) {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from('votes')
+    .insert({
+      survey_id: surveyId,
+      question_id: questionId,
+      answer_id: null,
+      text,
+      voter_id: voterId ?? null,
+    });
   if (error) throw error;
 }
 
@@ -152,7 +232,7 @@ export async function tallySurvey(surveyId: string): Promise<TallyQuestion[]> {
 
   const { data: textRows, error: textErr } = await sb
     .from('votes')
-    .select('id, question_id, text, created_at')
+    .select('id, question_id, text, created_at, voter_id, survey_voters(full_name, company)')
     .eq('survey_id', surveyId)
     .not('text', 'is', null);
   if (textErr) throw textErr;
@@ -173,8 +253,8 @@ export async function tallySurvey(surveyId: string): Promise<TallyQuestion[]> {
       const texts = rows
         .map((r) => ({
           participantId: String(r.id),
-          participantName: 'Anônimo',
-          participantCompany: '',
+          participantName: r.survey_voters?.full_name || 'Anônimo',
+          participantCompany: r.survey_voters?.company || '',
           text: r.text ?? '',
           updatedAt: r.created_at,
         }))

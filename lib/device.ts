@@ -1,5 +1,6 @@
 const DEVICE_KEY = 'taskq:deviceId';
 const PARTICIPANT_PREFIX = 'taskq:participant:';
+const SURVEY_VOTER_PREFIX = 'taskq:surveyVoter:';
 
 function uuid(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -31,4 +32,14 @@ export function setCachedParticipantId(executionId: string, participantId: strin
 export function clearCachedParticipantId(executionId: string) {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(PARTICIPANT_PREFIX + executionId);
+}
+
+export function getCachedSurveyVoterId(surveyId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(SURVEY_VOTER_PREFIX + surveyId);
+}
+
+export function setCachedSurveyVoterId(surveyId: string, voterId: string) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SURVEY_VOTER_PREFIX + surveyId, voterId);
 }

@@ -74,6 +74,17 @@ export type Execution = {
   participant_count?: number;
 };
 
+export type SurveyVoter = {
+  id: string;
+  survey_id: string;
+  device_id: string;
+  company: string;
+  full_name: string;
+  phone: string;
+  joined_at: string;
+  last_seen_at: string;
+};
+
 export type Participant = {
   id: string;
   execution_id: string;

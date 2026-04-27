@@ -12,10 +12,12 @@ import {
   subscribeExecutionList,
 } from '@/lib/executions';
 import { listSurveys } from '@/lib/store';
+import { getSupabase } from '@/lib/supabase';
 import { ExecutionCreateModal } from './ExecutionCreateModal';
 
 export function ExecutionList() {
   const [items, setItems] = useState<Execution[]>([]);
+  const [scoredSurveys, setScoredSurveys] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -34,9 +36,31 @@ export function ExecutionList() {
     }
   };
 
+  const reloadScoredSurveys = async () => {
+    try {
+      const sb = getSupabase();
+      const { data } = await sb
+        .from('answers')
+        .select('question_id, questions(survey_id)')
+        .eq('is_correct', true);
+      const ids = new Set<string>();
+      (data ?? []).forEach((row: any) => {
+        const sid = row.questions?.survey_id;
+        if (sid) ids.add(sid);
+      });
+      setScoredSurveys(ids);
+    } catch {
+      // silencioso
+    }
+  };
+
   useEffect(() => {
     reload();
-    const unsub = subscribeExecutionList(reload);
+    reloadScoredSurveys();
+    const unsub = subscribeExecutionList(() => {
+      reload();
+      reloadScoredSurveys();
+    });
     return unsub;
   }, []);
 
@@ -140,6 +164,11 @@ export function ExecutionList() {
                 <Link href={`/executions/track?id=${e.id}`} className="btn">
                   Acompanhar
                 </Link>
+                {e.status === 'finished' && scoredSurveys.has(e.survey_id) && (
+                  <Link href={`/executions/ranking?id=${e.id}`} className="btn primary">
+                    Ver ranking
+                  </Link>
+                )}
                 <button className="btn danger" onClick={() => handleDelete(e.id, e.title)}>
                   Excluir
                 </button>

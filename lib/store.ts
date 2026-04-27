@@ -39,13 +39,15 @@ export async function createSurvey(title = 'Nova enquete'): Promise<Survey> {
   return {
     ...(data as any),
     time_per_question: (data as any).time_per_question ?? 60,
+    points_per_correct: (data as any).points_per_correct ?? 1,
+    show_own_rank_to_client: (data as any).show_own_rank_to_client ?? false,
     questions: [],
   } as Survey;
 }
 
 export async function updateSurvey(
   id: string,
-  patch: Partial<Pick<Survey, 'title' | 'single_vote_per_device' | 'allow_multiple_choices' | 'time_per_question'>>
+  patch: Partial<Pick<Survey, 'title' | 'single_vote_per_device' | 'allow_multiple_choices' | 'time_per_question' | 'points_per_correct' | 'show_own_rank_to_client'>>
 ) {
   const sb = getSupabase();
   const { error } = await sb.from('surveys').update(patch).eq('id', id);
@@ -107,14 +109,14 @@ export async function addAnswer(questionId: string, text = ''): Promise<Answer> 
   const position = count ?? 0;
   const { data, error } = await sb
     .from('answers')
-    .insert({ id, question_id: questionId, text, position })
+    .insert({ id, question_id: questionId, text, position, is_correct: false })
     .select()
     .single();
   if (error) throw error;
-  return data as Answer;
+  return { ...(data as any), is_correct: (data as any).is_correct ?? false } as Answer;
 }
 
-export async function updateAnswer(id: string, patch: Partial<Pick<Answer, 'text'>>) {
+export async function updateAnswer(id: string, patch: Partial<Pick<Answer, 'text' | 'is_correct'>>) {
   const sb = getSupabase();
   const { error } = await sb.from('answers').update(patch).eq('id', id);
   if (error) throw error;
@@ -345,6 +347,7 @@ function normalizeSurvey(row: any): Survey {
           question_id: a.question_id,
           text: a.text,
           position: a.position ?? 0,
+          is_correct: a.is_correct ?? false,
         })),
     }));
   return {
@@ -353,6 +356,8 @@ function normalizeSurvey(row: any): Survey {
     single_vote_per_device: row.single_vote_per_device ?? true,
     allow_multiple_choices: row.allow_multiple_choices ?? false,
     time_per_question: row.time_per_question ?? 60,
+    points_per_correct: row.points_per_correct ?? 1,
+    show_own_rank_to_client: row.show_own_rank_to_client ?? false,
     created_at: row.created_at,
     questions,
   };

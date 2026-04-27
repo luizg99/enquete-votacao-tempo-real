@@ -112,11 +112,16 @@ export async function startExecution(id: string): Promise<Execution> {
   const exec = await getExecution(id);
   if (!exec) throw new Error('Execução não encontrada');
   const firstQuestion = exec.survey?.questions?.[0]?.id ?? null;
+
   const patch: any = { status: 'running' as ExecutionStatus };
   if (!exec.started_at) patch.started_at = new Date().toISOString();
-  if (!exec.current_question_id && firstQuestion) patch.current_question_id = firstQuestion;
   await updateExecution(id, patch);
-  return { ...exec, ...patch };
+
+  if (!exec.current_question_id && firstQuestion) {
+    await setCurrentQuestion(id, firstQuestion);
+  }
+
+  return { ...exec, ...patch, current_question_id: exec.current_question_id ?? firstQuestion };
 }
 
 export async function finishExecution(id: string) {
@@ -127,7 +132,20 @@ export async function finishExecution(id: string) {
 }
 
 export async function setCurrentQuestion(id: string, questionId: string | null) {
-  await updateExecution(id, { current_question_id: questionId });
+  const sb = getSupabase();
+  const { error } = await sb.rpc('set_current_question', {
+    p_exec: id,
+    p_q: questionId,
+  });
+  if (error) throw error;
+}
+
+export async function restartCurrentQuestionTimer(executionId: string) {
+  const sb = getSupabase();
+  const { error } = await sb.rpc('restart_current_question_timer', {
+    p_exec: executionId,
+  });
+  if (error) throw error;
 }
 
 // ---------- Participants ----------

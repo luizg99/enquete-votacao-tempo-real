@@ -23,6 +23,7 @@ export type Survey = {
   title: string;
   single_vote_per_device: boolean;
   allow_multiple_choices: boolean;
+  time_per_question: number;
   created_at: string;
   questions: Question[];
 };
@@ -111,4 +112,10 @@ export type Branding = {
   id: number;
   logo_url: string | null;
   updated_at: string;
+};
+
+export type ExecutionQuestionState = {
+  execution_id: string;
+  question_id: string;
+  started_at: string;
 };

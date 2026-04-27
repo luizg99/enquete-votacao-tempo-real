@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { getBranding, subscribeBranding } from '@/lib/branding';
 
-const HIDDEN_ON = ['/vote', '/qr', '/join', '/executions/run'];
+const OPERATOR_HIDDEN = ['/qr', '/executions/run'];
+const CLIENT_ROUTES = ['/vote', '/join'];
 
 export function Topbar() {
   const path = usePathname() ?? '';
@@ -28,7 +29,17 @@ export function Topbar() {
     return () => { active = false; unsub(); };
   }, []);
 
-  if (HIDDEN_ON.some((p) => path.startsWith(p))) return null;
+  if (OPERATOR_HIDDEN.some((p) => path.startsWith(p))) return null;
+
+  const isClientRoute = CLIENT_ROUTES.some((p) => path.startsWith(p));
+  if (isClientRoute) {
+    if (!logoUrl) return null;
+    return (
+      <header className="topbar topbar-client">
+        <img src={logoUrl} alt="Logo" className="brand-logo" />
+      </header>
+    );
+  }
 
   const isActive = (target: string) =>
     target === '/admin' ? path.startsWith('/admin') : path.startsWith(target);

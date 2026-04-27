@@ -256,13 +256,13 @@ export async function addMultiResponse(
 ) {
   return withRetry(async () => {
     const sb = getSupabase();
-    const { error } = await sb.from('execution_responses').insert({
-      execution_id: executionId,
-      participant_id: participantId,
-      question_id: questionId,
-      answer_id: answerId,
+    const { error } = await sb.rpc('add_multi_response', {
+      p_exec: executionId,
+      p_part: participantId,
+      p_q: questionId,
+      p_a: answerId,
     });
-    if (error && (error as any).code !== '23505') throw error; // ignora duplicate
+    if (error) throw error;
   });
 }
 
@@ -274,13 +274,12 @@ export async function removeMultiResponse(
 ) {
   return withRetry(async () => {
     const sb = getSupabase();
-    const { error } = await sb
-      .from('execution_responses')
-      .delete()
-      .eq('execution_id', executionId)
-      .eq('participant_id', participantId)
-      .eq('question_id', questionId)
-      .eq('answer_id', answerId);
+    const { error } = await sb.rpc('remove_multi_response', {
+      p_exec: executionId,
+      p_part: participantId,
+      p_q: questionId,
+      p_a: answerId,
+    });
     if (error) throw error;
   });
 }

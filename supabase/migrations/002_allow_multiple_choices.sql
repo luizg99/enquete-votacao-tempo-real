@@ -3,3 +3,4 @@
 
 alter table public.surveys
   add column if not exists allow_multiple_choices boolean not null default false;
+/brainstorming  /brainsto

@@ -161,3 +161,11 @@ end;
 $$ language plpgsql security definer;
 
 grant execute on function public.remove_multi_response(text, text, text, text) to anon, authenticated;
+
+-- Revoga execução pública do helper interno (somente as RPCs security definer chamam)
+revoke execute on function public._check_response_time(text, text) from public;
+
+-- Re-grants defensivos para as RPCs substituídas via CREATE OR REPLACE
+-- (preserva acesso anônimo em caso de reinstalação/fresh install)
+grant execute on function public.set_single_response(text, text, text, text) to anon, authenticated;
+grant execute on function public.set_text_response(text, text, text, text) to anon, authenticated;

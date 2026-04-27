@@ -5,6 +5,7 @@ import type {
   ExecutionStatus,
   Participant,
   ExecutionResponse,
+  ExecutionQuestionState,
   TallyQuestion,
   Survey,
 } from './types';
@@ -390,6 +391,36 @@ export function subscribeParticipants(executionId: string, onChange: () => void)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'participants', filter: `execution_id=eq.${executionId}` },
+      () => onChange()
+    )
+    .subscribe();
+  return () => { sb.removeChannel(channel); };
+}
+
+export async function listQuestionStates(
+  executionId: string
+): Promise<ExecutionQuestionState[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from('execution_question_states')
+    .select('*')
+    .eq('execution_id', executionId);
+  if (error) throw error;
+  return (data ?? []) as ExecutionQuestionState[];
+}
+
+export function subscribeQuestionStates(executionId: string, onChange: () => void) {
+  const sb = getSupabase();
+  const channel = sb
+    .channel(`exec-qstates-${executionId}-${rand()}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'execution_question_states',
+        filter: `execution_id=eq.${executionId}`,
+      },
       () => onChange()
     )
     .subscribe();

@@ -17,7 +17,10 @@ import {
   subscribeQuestionStates,
   subscribeExecution,
   subscribeExecutionResponses,
+  loadOwnRank,
+  executionIsScored,
 } from '@/lib/executions';
+import type { RankingEntry } from '@/lib/types';
 import { subscribeSurveyChanges } from '@/lib/store';
 import {
   getDeviceId,
@@ -324,10 +327,7 @@ function ParticipantVoteScreen({
     return (
       <div className="join-screen">
         <Header participant={participant} onEdit={onEdit} />
-        <div className="card center">
-          <h1>✓ Execução encerrada</h1>
-          <p className="muted">Obrigado pela sua participação!</p>
-        </div>
+        <FinishedBlock execution={execution} participant={participant} />
       </div>
     );
   }
@@ -597,4 +597,70 @@ function Header({ participant, onEdit }: { participant: Participant; onEdit: () 
       <button className="btn ghost" onClick={onEdit}>Editar informações</button>
     </div>
   );
+}
+
+function FinishedBlock({
+  execution,
+  participant,
+}: {
+  execution: Execution;
+  participant: Participant;
+}) {
+  const [ownRank, setOwnRank] = useState<RankingEntry | null>(null);
+  const [scored, setScored] = useState<boolean | null>(null);
+  const showRank = execution.survey?.show_own_rank_to_client === true;
+
+  useEffect(() => {
+    if (!showRank) return;
+    let active = true;
+    (async () => {
+      try {
+        const isScored = await executionIsScored(execution.id);
+        if (!active) return;
+        setScored(isScored);
+        if (isScored) {
+          const r = await loadOwnRank(execution.id, participant.id);
+          if (active) setOwnRank(r);
+        }
+      } catch {
+        // silencioso
+      }
+    })();
+    return () => { active = false; };
+  }, [execution.id, participant.id, showRank]);
+
+  if (!showRank || scored === false) {
+    return (
+      <div className="card center">
+        <h1>✓ Execução encerrada</h1>
+        <p className="muted">Obrigado pela sua participação!</p>
+      </div>
+    );
+  }
+
+  if (scored === null || ownRank === null) {
+    return (
+      <div className="card center">
+        <h1>✓ Execução encerrada</h1>
+        <p className="muted">Calculando sua pontuação…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card center">
+      <h1>Você ficou em {positionLabel(ownRank.position)}</h1>
+      <p style={{ fontSize: 22, fontWeight: 600, color: '#4f46e5', margin: '8px 0' }}>
+        {ownRank.totalPoints.toFixed(2)} pontos
+      </p>
+      <p className="muted">Obrigado pela sua participação!</p>
+    </div>
+  );
+}
+
+function positionLabel(p: number): string {
+  if (p === 1) return '🥇 1º';
+  if (p === 2) return '🥈 2º';
+  if (p === 3) return '🥉 3º';
+  return `${p}º`;
 }

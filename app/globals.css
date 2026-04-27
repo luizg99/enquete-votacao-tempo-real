@@ -337,6 +337,27 @@ input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset:
   gap: 16px; margin-bottom: 8px;
 }
 
+/* ----------------- Ranking ----------------- */
+.ranking-table {
+  width: 100%; border-collapse: collapse;
+}
+.ranking-table th, .ranking-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  text-align: left; vertical-align: middle;
+}
+.ranking-table th {
+  font-weight: 600; color: var(--muted); font-size: 13px;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.ranking-table tbody tr:hover { background: var(--surface-alt); }
+.ranking-table .rank-position { font-weight: 600; font-size: 16px; }
+.ranking-table tr.rank-top td { font-weight: 500; }
+.ranking-table tr.rank-1 .rank-position { color: #ca8a04; }
+.ranking-table tr.rank-2 .rank-position { color: #94a3b8; }
+.ranking-table tr.rank-3 .rank-position { color: #b45309; }
+
+.answer-correct input[type="checkbox"] { accent-color: var(--success); width: 18px; height: 18px; }
+
 /* ----------------- Timer ----------------- */
 .timer {
   display: inline-flex; align-items: center; gap: 6px;

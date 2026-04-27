@@ -330,6 +330,11 @@ input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset:
   .topbar nav a { margin-left: 10px; }
 }
 
+.run-graph-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; margin-bottom: 8px;
+}
+
 /* ----------------- Timer ----------------- */
 .timer {
   display: inline-flex; align-items: center; gap: 6px;

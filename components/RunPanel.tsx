@@ -10,11 +10,15 @@ import {
   finishExecution,
   tallyExecution,
   countParticipants,
+  restartCurrentQuestionTimer,
+  listQuestionStates,
+  subscribeQuestionStates,
   subscribeExecution,
   subscribeExecutionResponses,
   subscribeParticipants,
 } from '@/lib/executions';
 import { subscribeSurveyChanges } from '@/lib/store';
+import { Timer } from './Timer';
 
 type LayoutMode = 'split' | 'qr-fullscreen' | 'graph-fullscreen';
 
@@ -23,6 +27,7 @@ export function RunPanel({ executionId }: { executionId: string }) {
   const [exec, setExec] = useState<Execution | null>(null);
   const [tally, setTally] = useState<TallyQuestion[]>([]);
   const [participantCount, setParticipantCount] = useState(0);
+  const [questionStates, setQuestionStates] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<LayoutMode>('split');
 
@@ -41,17 +46,31 @@ export function RunPanel({ executionId }: { executionId: string }) {
     }
   };
 
+  const reloadQuestionStates = async () => {
+    try {
+      const list = await listQuestionStates(executionId);
+      const map = new Map<string, string>();
+      list.forEach((s) => map.set(s.question_id, s.started_at));
+      setQuestionStates(map);
+    } catch {
+      // silencioso
+    }
+  };
+
   useEffect(() => {
     reload();
+    reloadQuestionStates();
     const unsubExec = subscribeExecution(executionId, reload);
     const unsubResp = subscribeExecutionResponses(executionId, reload);
     const unsubPart = subscribeParticipants(executionId, () => {
       countParticipants(executionId).then(setParticipantCount).catch(() => {});
     });
+    const unsubQS = subscribeQuestionStates(executionId, reloadQuestionStates);
     return () => {
       unsubExec();
       unsubResp();
       unsubPart();
+      unsubQS();
     };
   }, [executionId]);
 
@@ -128,9 +147,16 @@ export function RunPanel({ executionId }: { executionId: string }) {
             </div>
           ) : (
             <div className="run-graph-inner">
-              <div className="run-question-meta">
-                Pergunta {currentIdx + 1} de {questions.length}
-                {currentQuestion.type === 'text' && ' · dissertativa'}
+              <div className="run-graph-header">
+                <div className="run-question-meta">
+                  Pergunta {currentIdx + 1} de {questions.length}
+                  {currentQuestion.type === 'text' && ' · dissertativa'}
+                </div>
+                <Timer
+                  size="large"
+                  startedAt={questionStates.get(currentQuestion.id) ?? null}
+                  durationSec={exec.survey?.time_per_question ?? 60}
+                />
               </div>
               <h2 className="run-question-text">{currentQuestion.text || '(sem texto)'}</h2>
               <small className="muted">
@@ -228,6 +254,20 @@ export function RunPanel({ executionId }: { executionId: string }) {
           onClick={goNext}
         >
           Próxima pergunta →
+        </button>
+        <button
+          className="btn"
+          disabled={!exec.current_question_id || exec.status !== 'running'}
+          onClick={async () => {
+            if (!confirm('Reiniciar contagem desta pergunta?')) return;
+            try {
+              await restartCurrentQuestionTimer(executionId);
+            } catch (e: any) {
+              alert('Erro ao reiniciar: ' + (e.message ?? e));
+            }
+          }}
+        >
+          ↻ Reiniciar timer
         </button>
         <div className="spacer" />
         <button className="btn danger" onClick={handleFinish} disabled={exec.status === 'finished'}>

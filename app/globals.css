@@ -351,7 +351,8 @@ input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset:
 }
 .ranking-table tbody tr:hover { background: var(--surface-alt); }
 .ranking-table .rank-position { font-weight: 600; font-size: 16px; }
-.ranking-table tr.rank-top td { font-weight: 500; }
+.ranking-table tr.rank-top td { font-weight: 500; background: #dcfce7; }
+.ranking-table tr.rank-top:hover td { background: #bbf7d0; }
 .ranking-table tr.rank-1 .rank-position { color: #ca8a04; }
 .ranking-table tr.rank-2 .rank-position { color: #94a3b8; }
 .ranking-table tr.rank-3 .rank-position { color: #b45309; }

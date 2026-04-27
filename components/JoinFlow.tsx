@@ -13,6 +13,8 @@ import {
   addMultiResponse,
   removeMultiResponse,
   setTextResponse,
+  listQuestionStates,
+  subscribeQuestionStates,
   subscribeExecution,
   subscribeExecutionResponses,
 } from '@/lib/executions';
@@ -22,14 +24,27 @@ import {
   getCachedParticipantId,
   setCachedParticipantId,
 } from '@/lib/device';
+import { Timer } from './Timer';
 
 export function JoinFlow({ executionId }: { executionId: string }) {
   const [exec, setExec] = useState<Execution | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [responses, setResponses] = useState<ExecutionResponse[]>([]);
+  const [questionStates, setQuestionStates] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const reloadQS = async () => {
+    try {
+      const list = await listQuestionStates(executionId);
+      const map = new Map<string, string>();
+      list.forEach((s) => map.set(s.question_id, s.started_at));
+      setQuestionStates(map);
+    } catch {
+      // silencioso
+    }
+  };
 
   const reloadExec = async () => {
     try {
@@ -53,6 +68,7 @@ export function JoinFlow({ executionId }: { executionId: string }) {
     let unsubExec: (() => void) | null = null;
     let unsubResp: (() => void) | null = null;
     let unsubSurvey: (() => void) | null = null;
+    let unsubQS: (() => void) | null = null;
 
     (async () => {
       try {
@@ -101,6 +117,8 @@ export function JoinFlow({ executionId }: { executionId: string }) {
         unsubResp = subscribeExecutionResponses(executionId, () => {
           if (p) reloadResponses(p.id);
         });
+        await reloadQS();
+        unsubQS = subscribeQuestionStates(executionId, reloadQS);
         if (e.survey_id) unsubSurvey = subscribeSurveyChanges(e.survey_id, reloadExec);
       } catch (err: any) {
         setError(err.message ?? String(err));
@@ -113,6 +131,7 @@ export function JoinFlow({ executionId }: { executionId: string }) {
       if (unsubExec) unsubExec();
       if (unsubResp) unsubResp();
       if (unsubSurvey) unsubSurvey();
+      if (unsubQS) unsubQS();
     };
   }, [executionId]);
 
@@ -152,6 +171,7 @@ export function JoinFlow({ executionId }: { executionId: string }) {
       participant={participant}
       responses={responses}
       setResponses={setResponses}
+      questionStates={questionStates}
       onEdit={() => setShowEdit(true)}
       onResponsesChanged={() => reloadResponses(participant.id)}
     />
@@ -250,6 +270,7 @@ function ParticipantVoteScreen({
   participant,
   responses,
   setResponses,
+  questionStates,
   onEdit,
   onResponsesChanged,
 }: {
@@ -257,10 +278,12 @@ function ParticipantVoteScreen({
   participant: Participant;
   responses: ExecutionResponse[];
   setResponses: React.Dispatch<React.SetStateAction<ExecutionResponse[]>>;
+  questionStates: Map<string, string>;
   onEdit: () => void;
   onResponsesChanged: () => void;
 }) {
   const [warning, setWarning] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     if (!warning) return;
@@ -268,8 +291,17 @@ function ParticipantVoteScreen({
     return () => clearTimeout(t);
   }, [warning]);
 
-  const handleFailure = () => {
-    setWarning('Sem conexão estável. Sua resposta não foi salva — toque novamente.');
+  const handleFailure = (e?: any) => {
+    const msg = String(e?.message ?? '').toLowerCase();
+    if (msg.includes('tempo esgotado')) {
+      setWarning('Tempo esgotado para esta pergunta.');
+    } else if (msg.includes('não está ativa')) {
+      setWarning('Esta pergunta não está mais ativa.');
+    } else if (msg.includes('timer não iniciado')) {
+      setWarning('Aguardando o anfitrião iniciar a pergunta.');
+    } else {
+      setWarning('Sem conexão estável. Sua resposta não foi salva — toque novamente.');
+    }
     onResponsesChanged();
   };
 
@@ -373,6 +405,14 @@ function ParticipantVoteScreen({
       {warning && <div className="join-warning">{warning}</div>}
 
       <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <Timer
+            size="small"
+            startedAt={questionStates.get(currentQuestion.id) ?? null}
+            durationSec={execution.survey?.time_per_question ?? 60}
+            onExpiredChange={setExpired}
+          />
+        </div>
         <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>
           {execution.title}
         </div>
@@ -388,6 +428,7 @@ function ParticipantVoteScreen({
             currentQuestionId={currentQuestion.id}
             responses={responses}
             setResponses={setResponses}
+            disabled={expired}
             onFailure={handleFailure}
           />
         ) : (
@@ -399,11 +440,15 @@ function ParticipantVoteScreen({
                 currentQuestion.answers.map((a) => {
                   const isSel = selectedIds.has(a.id);
                   return (
-                    <label key={a.id} className={`option${isSel ? ' selected' : ''}`}>
+                    <label
+                      key={a.id}
+                      className={`option${isSel ? ' selected' : ''}${expired ? ' disabled' : ''}`}
+                    >
                       <input
                         type={multi ? 'checkbox' : 'radio'}
                         name={`q-${currentQuestion.id}`}
                         checked={isSel}
+                        disabled={expired}
                         onChange={() => (multi ? toggleMulti(a.id) : toggleSingle(a.id))}
                       />
                       <span>{a.text || '(sem texto)'}</span>
@@ -413,12 +458,18 @@ function ParticipantVoteScreen({
               )}
             </div>
 
-            {selectedIds.size > 0 && (
+            {selectedIds.size > 0 && !expired && (
               <small className="muted" style={{ display: 'block', marginTop: 8 }}>
                 ✓ Sua resposta foi registrada. Aguarde a próxima pergunta.
               </small>
             )}
           </>
+        )}
+
+        {expired && (
+          <small style={{ display: 'block', marginTop: 8, color: '#dc2626', fontWeight: 500 }}>
+            Tempo esgotado — sua última resposta foi registrada
+          </small>
         )}
       </div>
     </div>
@@ -431,6 +482,7 @@ function TextResponseField({
   currentQuestionId,
   responses,
   setResponses,
+  disabled,
   onFailure,
 }: {
   execution: Execution;
@@ -438,7 +490,8 @@ function TextResponseField({
   currentQuestionId: string;
   responses: ExecutionResponse[];
   setResponses: React.Dispatch<React.SetStateAction<ExecutionResponse[]>>;
-  onFailure: () => void;
+  disabled: boolean;
+  onFailure: (e?: any) => void;
 }) {
   const existing = useMemo(
     () => responses.find((r) => r.question_id === currentQuestionId && r.answer_id === null),
@@ -494,9 +547,9 @@ function TextResponseField({
         lastSavedRef.current = text;
         setStatus('saved');
       })
-      .catch(() => {
+      .catch((e: any) => {
         setStatus('idle');
-        onFailure();
+        onFailure(e);
       });
   };
 
@@ -519,6 +572,7 @@ function TextResponseField({
         value={value}
         placeholder="Escreva sua resposta…"
         rows={6}
+        readOnly={disabled}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
       />

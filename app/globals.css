@@ -132,6 +132,8 @@ input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset:
 .option:hover { border-color: var(--primary); }
 .option input { margin: 0; }
 .option.selected { border-color: var(--primary); background: #eef2ff; }
+.option.disabled { opacity: 0.6; cursor: not-allowed; }
+.option.disabled:hover { border-color: var(--border); }
 
 .qr-fullscreen {
   position: fixed; inset: 0; background: #fff;

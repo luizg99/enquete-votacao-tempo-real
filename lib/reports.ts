@@ -45,7 +45,9 @@ export async function loadExecutionReport(executionId: string): Promise<ReportDa
 
   const answerMap = new Map<string, string>();
   exec.survey.questions.forEach((q) =>
-    q.answers.forEach((a) => answerMap.set(a.id, a.text || '(sem texto)'))
+    q.answers.forEach((a, i) =>
+      answerMap.set(a.id, `${letterFor(i)} — ${a.text || '(sem texto)'}`)
+    )
   );
 
   const participants: ReportParticipant[] = (parts ?? []).map((p: any) => {
@@ -96,7 +98,9 @@ export async function loadSurveyReport(surveyId: string): Promise<ReportData | n
 
   const answerMap = new Map<string, string>();
   survey.questions.forEach((q) =>
-    q.answers.forEach((a) => answerMap.set(a.id, a.text || '(sem texto)'))
+    q.answers.forEach((a, i) =>
+      answerMap.set(a.id, `${letterFor(i)} — ${a.text || '(sem texto)'}`)
+    )
   );
 
   const participants: ReportParticipant[] = (voters ?? []).map((v: any) => {
@@ -183,6 +187,16 @@ function slugify(s: string): string {
 
 function todayStamp(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function letterFor(index: number): string {
+  let n = index;
+  let s = '';
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return s;
 }
 
 function formatDate(iso: string): string {

@@ -52,6 +52,11 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
       <label className="muted">Descrição</label>
       <TitleInput survey={survey} />
 
+      <div style={{ marginTop: 12 }}>
+        <label className="muted">Tempo de resposta por pergunta</label>
+        <TimePerQuestionInput survey={survey} />
+      </div>
+
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
         <input
           type="checkbox"
@@ -308,5 +313,36 @@ function AnswerTextInput({ answer }: { answer: Survey['questions'][number]['answ
         save(e.target.value);
       }}
     />
+  );
+}
+
+function TimePerQuestionInput({ survey }: { survey: Survey }) {
+  const [value, setValue] = useState(String(survey.time_per_question ?? 60));
+  const save = useDebouncedCallback((v: string) => {
+    const n = Math.max(5, Math.min(3600, parseInt(v, 10) || 60));
+    updateSurvey(survey.id, { time_per_question: n });
+  }, 400);
+
+  useEffect(() => {
+    setValue(String(survey.time_per_question ?? 60));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [survey.id]);
+
+  return (
+    <div className="row" style={{ gap: 8, marginTop: 4 }}>
+      <input
+        type="number"
+        min={5}
+        max={3600}
+        step={1}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          save(e.target.value);
+        }}
+        style={{ maxWidth: 120 }}
+      />
+      <span className="muted">segundos (5–3600)</span>
+    </div>
   );
 }

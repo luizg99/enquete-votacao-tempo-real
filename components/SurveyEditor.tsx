@@ -57,6 +57,22 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
         <TimePerQuestionInput survey={survey} />
       </div>
 
+      <div style={{ marginTop: 12 }}>
+        <label className="muted">Pontuação por pergunta correta</label>
+        <PointsPerCorrectInput survey={survey} />
+      </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={survey.show_own_rank_to_client}
+          onChange={(e) =>
+            updateSurvey(survey.id, { show_own_rank_to_client: e.target.checked })
+          }
+        />
+        <span>Mostrar posição própria para o cliente ao final</span>
+      </label>
+
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
         <input
           type="checkbox"
@@ -216,7 +232,7 @@ function QuestionBlock({
         <button
           className="btn danger"
           onClick={() => {
-            if (confirm('Excluir esta pergunta?')) removeQuestion(question.id);
+            if (confirm('Deseja realmente excluir a pergunta?')) removeQuestion(question.id);
           }}
         >
           Excluir pergunta
@@ -250,6 +266,18 @@ function QuestionBlock({
             {question.answers.map((a) => (
               <div key={a.id} className="answer-row">
                 <AnswerTextInput answer={a} />
+                <label
+                  className="answer-correct"
+                  title="Marcar como resposta correta"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={a.is_correct}
+                    onChange={(e) => updateAnswer(a.id, { is_correct: e.target.checked })}
+                  />
+                  <span style={{ fontSize: 13 }}>Correta</span>
+                </label>
                 <button
                   className="btn icon danger"
                   title="Excluir resposta"
@@ -344,6 +372,38 @@ function TimePerQuestionInput({ survey }: { survey: Survey }) {
         style={{ maxWidth: 120 }}
       />
       <span className="muted">segundos (5–3600)</span>
+    </div>
+  );
+}
+
+function PointsPerCorrectInput({ survey }: { survey: Survey }) {
+  const [value, setValue] = useState(String(survey.points_per_correct ?? 1));
+  const save = useDebouncedCallback((v: string) => {
+    const parsed = parseInt(v, 10);
+    const n = Math.max(1, Math.min(10, Number.isFinite(parsed) ? parsed : 1));
+    updateSurvey(survey.id, { points_per_correct: n });
+  }, 400);
+
+  useEffect(() => {
+    setValue(String(survey.points_per_correct ?? 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [survey.id]);
+
+  return (
+    <div className="row" style={{ gap: 8, marginTop: 4 }}>
+      <input
+        type="number"
+        min={1}
+        max={10}
+        step={1}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          save(e.target.value);
+        }}
+        style={{ maxWidth: 120 }}
+      />
+      <span className="muted">pontos (1–10) por pergunta acertada</span>
     </div>
   );
 }

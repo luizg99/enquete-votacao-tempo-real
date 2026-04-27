@@ -6,6 +6,7 @@ import type {
   Participant,
   ExecutionResponse,
   ExecutionQuestionState,
+  RankingEntry,
   TallyQuestion,
   Survey,
 } from './types';
@@ -129,6 +130,19 @@ export async function finishExecution(id: string) {
     status: 'finished',
     finished_at: new Date().toISOString(),
   });
+  // Materializa as pontuações (idempotente)
+  try {
+    await computeExecutionScores(id);
+  } catch (e) {
+    // Não bloqueia finalização se compute falhar; admin pode tentar abrir o ranking depois
+    console.error('Erro ao computar pontuações:', e);
+  }
+}
+
+export async function computeExecutionScores(executionId: string) {
+  const sb = getSupabase();
+  const { error } = await sb.rpc('compute_execution_scores', { p_exec: executionId });
+  if (error) throw error;
 }
 
 export async function setCurrentQuestion(id: string, questionId: string | null) {
@@ -442,4 +456,65 @@ export function subscribeQuestionStates(executionId: string, onChange: () => voi
     )
     .subscribe();
   return () => { sb.removeChannel(channel); };
+}
+
+// ---------- Ranking ----------
+export async function executionIsScored(executionId: string): Promise<boolean> {
+  const exec = await getExecution(executionId);
+  if (!exec || !exec.survey) return false;
+  return exec.survey.questions.some((q) =>
+    q.answers.some((a) => a.is_correct)
+  );
+}
+
+export async function loadRanking(executionId: string): Promise<RankingEntry[]> {
+  const sb = getSupabase();
+  const { data: parts, error: pErr } = await sb
+    .from('participants')
+    .select('id, full_name, company')
+    .eq('execution_id', executionId);
+  if (pErr) throw pErr;
+
+  const { data: scores, error: sErr } = await sb
+    .from('execution_question_scores')
+    .select('participant_id, points')
+    .eq('execution_id', executionId);
+  if (sErr) throw sErr;
+
+  const totalsByParticipant = new Map<string, number>();
+  (scores ?? []).forEach((s: any) => {
+    const cur = totalsByParticipant.get(s.participant_id) ?? 0;
+    totalsByParticipant.set(s.participant_id, cur + Number(s.points ?? 0));
+  });
+
+  const rows = (parts ?? []).map((p: any) => ({
+    participantId: p.id,
+    name: p.full_name ?? '',
+    company: p.company ?? '',
+    totalPoints: totalsByParticipant.get(p.id) ?? 0,
+  }));
+
+  // Ordena por pontos desc, depois nome asc para estabilidade
+  rows.sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name));
+
+  // Atribui posição com regra olímpica (empate compartilha posição, próxima posição pula)
+  const ranking: RankingEntry[] = [];
+  let lastPoints = Number.NaN;
+  let lastPosition = 0;
+  rows.forEach((r, idx) => {
+    const position = r.totalPoints === lastPoints ? lastPosition : idx + 1;
+    lastPoints = r.totalPoints;
+    lastPosition = position;
+    ranking.push({ ...r, position });
+  });
+
+  return ranking;
+}
+
+export async function loadOwnRank(
+  executionId: string,
+  participantId: string
+): Promise<RankingEntry | null> {
+  const ranking = await loadRanking(executionId);
+  return ranking.find((r) => r.participantId === participantId) ?? null;
 }

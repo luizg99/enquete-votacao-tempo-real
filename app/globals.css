@@ -329,3 +329,34 @@ input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset:
   .topbar { padding: 12px 16px; }
   .topbar nav a { margin-left: 10px; }
 }
+
+/* ----------------- Timer ----------------- */
+.timer {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+  border: 2px solid currentColor;
+  transition: color .25s, background .25s;
+}
+.timer-large { font-size: 22px; padding: 10px 18px; min-width: 130px; justify-content: center; }
+.timer-small { font-size: 14px; padding: 4px 10px; }
+.timer-idle    { color: #94a3b8; background: #f8fafc; }
+.timer-green   { color: #16a34a; background: #f0fdf4; }
+.timer-yellow  { color: #ca8a04; background: #fefce8; }
+.timer-red     { color: #dc2626; background: #fef2f2; }
+.timer-expired { color: #dc2626; background: #fee2e2; font-weight: 700; }
+.timer-critical { animation: timer-pulse 1s infinite; }
+.timer-shake    { animation: timer-shake 0.5s ease-in-out; }
+.timer-icon { font-size: 0.85em; }
+
+@keyframes timer-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+@keyframes timer-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-8px); }
+  40%      { transform: translateX(8px); }
+  60%      { transform: translateX(-6px); }
+  80%      { transform: translateX(6px); }
+}

@@ -319,7 +319,8 @@ function AnswerTextInput({ answer }: { answer: Survey['questions'][number]['answ
 function TimePerQuestionInput({ survey }: { survey: Survey }) {
   const [value, setValue] = useState(String(survey.time_per_question ?? 60));
   const save = useDebouncedCallback((v: string) => {
-    const n = Math.max(5, Math.min(3600, parseInt(v, 10) || 60));
+    const parsed = parseInt(v, 10);
+    const n = Math.max(5, Math.min(3600, Number.isFinite(parsed) ? parsed : 60));
     updateSurvey(survey.id, { time_per_question: n });
   }, 400);
 

@@ -3,6 +3,7 @@ export type Answer = {
   question_id: string;
   text: string;
   position: number;
+  is_correct: boolean;
   votes?: number;
 };
 
@@ -24,6 +25,8 @@ export type Survey = {
   single_vote_per_device: boolean;
   allow_multiple_choices: boolean;
   time_per_question: number;
+  points_per_correct: number;
+  show_own_rank_to_client: boolean;
   created_at: string;
   questions: Question[];
 };
@@ -118,4 +121,20 @@ export type ExecutionQuestionState = {
   execution_id: string;
   question_id: string;
   started_at: string;
+};
+
+export type ExecutionScore = {
+  execution_id: string;
+  participant_id: string;
+  question_id: string;
+  points: number;
+  computed_at: string;
+};
+
+export type RankingEntry = {
+  participantId: string;
+  name: string;
+  company: string;
+  totalPoints: number;
+  position: number;
 };

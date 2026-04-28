@@ -29,6 +29,7 @@ export function Topbar() {
     return () => { active = false; unsub(); };
   }, []);
 
+  if (path === '/' || path === '') return null;
   if (OPERATOR_HIDDEN.some((p) => path.startsWith(p))) return null;
 
   const isClientRoute = CLIENT_ROUTES.some((p) => path.startsWith(p));

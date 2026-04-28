@@ -177,9 +177,11 @@ export function VoteStepper({ surveyId }: { surveyId: string }) {
           <strong>{voter.full_name}</strong>
           <small className="muted"> · {voter.company}</small>
         </div>
-        <button className="btn ghost" onClick={() => setShowEdit(true)}>
-          Editar informações
-        </button>
+        {step === 0 && (
+          <button className="btn ghost" onClick={() => setShowEdit(true)}>
+            Editar informações
+          </button>
+        )}
       </div>
 
       <h1>{survey.title || 'Enquete'}</h1>

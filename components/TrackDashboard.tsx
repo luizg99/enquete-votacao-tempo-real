@@ -59,7 +59,7 @@ export function TrackDashboard({ surveyId }: { surveyId: string }) {
         </div>
         <div className="spacer" />
         <ExportButtons load={() => loadSurveyReport(surveyId)} />
-        <Link href="/admin" className="btn">← Admin</Link>
+        <Link href="/admin" className="btn">← Cadastrar enquetes</Link>
         <Link href={`/qr?id=${surveyId}`} className="btn primary">QR Code</Link>
       </div>
 

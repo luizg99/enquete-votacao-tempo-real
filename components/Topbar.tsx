@@ -55,7 +55,7 @@ export function Topbar() {
       </Link>
       <nav>
         <Link href="/admin" className={isActive('/admin') ? 'active' : ''}>
-          Admin
+          Cadastrar enquetes
         </Link>
         <Link href="/executions" className={isActive('/executions') ? 'active' : ''}>
           Execuções

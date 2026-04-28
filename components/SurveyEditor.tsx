@@ -112,6 +112,8 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
         <span>Permitir múltiplas escolhas por pergunta</span>
       </label>
 
+      {isPerAnswer && <ScoreBandsEditor surveyId={survey.id} />}
+
       <div style={{ marginTop: 16 }}>
         <div className="row" style={{ alignItems: 'flex-end' }}>
           <h3 style={{ margin: 0 }}>Perguntas</h3>
@@ -127,8 +129,6 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
           </button>
         </div>
       </div>
-
-      {isPerAnswer && <ScoreBandsEditor surveyId={survey.id} />}
     </div>
   );
 }
@@ -473,8 +473,8 @@ function AnswerPointsInput({
     }
     const parsed = parseInt(trimmed, 10);
     if (!Number.isFinite(parsed)) return;
-    const n = Math.max(1, Math.min(10, parsed));
-    updateAnswer(answer.id, { answer_points: n });
+    if (parsed < 1 || parsed > 10) return;
+    updateAnswer(answer.id, { answer_points: parsed });
   }, 400);
 
   useEffect(() => {
@@ -482,7 +482,20 @@ function AnswerPointsInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answer.id]);
 
-  const invalid = value !== '' && (parseInt(value, 10) < 1 || parseInt(value, 10) > 10 || !Number.isFinite(parseInt(value, 10)));
+  const handleChange = (raw: string) => {
+    if (raw === '') {
+      setValue('');
+      save('');
+      return;
+    }
+    if (!/^\d+$/.test(raw)) return; // só dígitos
+    const parsed = parseInt(raw, 10);
+    if (parsed > 10) return; // rejeita digitação que excede o limite
+    setValue(raw);
+    save(raw);
+  };
+
+  const invalid = value !== '' && parseInt(value, 10) < 1;
 
   return (
     <label
@@ -503,11 +516,9 @@ function AnswerPointsInput({
         min={1}
         max={10}
         step={1}
+        inputMode="numeric"
         value={value}
-        onChange={(e) => {
-          setValue(e.target.value);
-          save(e.target.value);
-        }}
+        onChange={(e) => handleChange(e.target.value)}
         style={{
           width: 64,
           ...(invalid ? { borderColor: '#dc2626', background: '#fef2f2' } : {}),
@@ -552,15 +563,35 @@ function TimePerQuestionInput({ survey }: { survey: Survey }) {
 function PointsPerCorrectInput({ survey }: { survey: Survey }) {
   const [value, setValue] = useState(String(survey.points_per_correct ?? 1));
   const save = useDebouncedCallback((v: string) => {
+    if (v === '') return;
     const parsed = parseInt(v, 10);
-    const n = Math.max(1, Math.min(10, Number.isFinite(parsed) ? parsed : 1));
-    updateSurvey(survey.id, { points_per_correct: n });
+    if (!Number.isFinite(parsed)) return;
+    if (parsed < 1 || parsed > 10) return;
+    updateSurvey(survey.id, { points_per_correct: parsed });
   }, 400);
 
   useEffect(() => {
     setValue(String(survey.points_per_correct ?? 1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [survey.id]);
+
+  const handleChange = (raw: string) => {
+    if (raw === '') {
+      setValue('');
+      return;
+    }
+    if (!/^\d+$/.test(raw)) return;
+    const parsed = parseInt(raw, 10);
+    if (parsed > 10) return;
+    setValue(raw);
+    save(raw);
+  };
+
+  const handleBlur = () => {
+    if (value === '' || parseInt(value, 10) < 1) {
+      setValue(String(survey.points_per_correct ?? 1));
+    }
+  };
 
   return (
     <div className="row" style={{ gap: 8, marginTop: 4 }}>
@@ -569,11 +600,10 @@ function PointsPerCorrectInput({ survey }: { survey: Survey }) {
         min={1}
         max={10}
         step={1}
+        inputMode="numeric"
         value={value}
-        onChange={(e) => {
-          setValue(e.target.value);
-          save(e.target.value);
-        }}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
         style={{ maxWidth: 120 }}
       />
       <span className="muted">pontos (1–10) por pergunta acertada</span>

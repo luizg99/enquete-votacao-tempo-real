@@ -1,4 +1,4 @@
-import { addQuestion, addAnswer, updateQuestion, updateAnswer } from './store';
+import { addQuestion, addAnswer, updateQuestion } from './store';
 import type { ScoringMode } from './types';
 
 export type ParsedQuestion = {
@@ -427,13 +427,10 @@ export async function importQuestionsToSurvey(
     } else {
       const correctSet = new Set(q.correctIndices);
       for (let i = 0; i < q.answers.length; i++) {
-        const ans = await addAnswer(created.id, q.answers[i]);
-        const patch: { is_correct?: boolean; answer_points?: number | null } = {};
-        if (correctSet.has(i)) patch.is_correct = true;
-        if (q.answerPoints[i] != null) patch.answer_points = q.answerPoints[i];
-        if (Object.keys(patch).length > 0) {
-          await updateAnswer(ans.id, patch);
-        }
+        await addAnswer(created.id, q.answers[i], {
+          is_correct: correctSet.has(i),
+          answer_points: q.answerPoints[i] ?? null,
+        });
       }
     }
     count++;

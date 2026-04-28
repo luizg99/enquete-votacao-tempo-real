@@ -28,28 +28,34 @@ export function ScoreBandsEditor({
 }) {
   const [bands, setBands] = useState<ScoreBand[]>([]);
   const [loading, setLoading] = useState(true);
+  const reqIdRef = useRef(0);
 
   const reload = async () => {
+    const myId = ++reqIdRef.current;
     try {
       const list = await listScoreBands(surveyId);
+      // Descarta resultados obsoletos (race entre múltiplos eventos de realtime)
+      if (myId !== reqIdRef.current) return;
       setBands(list);
     } finally {
-      setLoading(false);
+      if (myId === reqIdRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     let mounted = true;
+    reqIdRef.current = 0;
     (async () => {
+      const myId = ++reqIdRef.current;
       const list = await listScoreBands(surveyId);
-      if (!mounted) return;
+      if (!mounted || myId !== reqIdRef.current) return;
       // Auto-seed na primeira abertura sem faixas configuradas
       if (list.length === 0) {
         try {
           const seeded = await seedDefaultBands(surveyId);
-          if (mounted) setBands(seeded);
+          if (mounted && myId === reqIdRef.current) setBands(seeded);
         } catch {
-          if (mounted) setBands([]);
+          if (mounted && myId === reqIdRef.current) setBands([]);
         }
       } else {
         setBands(list);
@@ -79,7 +85,15 @@ export function ScoreBandsEditor({
 
   const handleRemove = async (id: string) => {
     if (!confirm('Excluir esta faixa?')) return;
-    await removeScoreBand(id);
+    // Atualização otimista: remove da UI imediatamente, sem esperar o realtime
+    setBands((prev) => prev.filter((b) => b.id !== id));
+    try {
+      await removeScoreBand(id);
+    } catch (e: any) {
+      alert('Erro ao excluir faixa: ' + (e.message ?? e));
+      // Em caso de erro, força refresh para sincronizar com o servidor
+      reload();
+    }
   };
 
   const handleRestoreExample = async () => {

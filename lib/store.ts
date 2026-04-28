@@ -100,7 +100,11 @@ export async function removeQuestion(id: string) {
 }
 
 // ---------- Answers ----------
-export async function addAnswer(questionId: string, text = ''): Promise<Answer> {
+export async function addAnswer(
+  questionId: string,
+  text = '',
+  initial: Partial<Pick<Answer, 'is_correct' | 'answer_points'>> = {}
+): Promise<Answer> {
   const sb = getSupabase();
   const id = uid('a');
   const { count } = await sb
@@ -110,7 +114,14 @@ export async function addAnswer(questionId: string, text = ''): Promise<Answer> 
   const position = count ?? 0;
   const { data, error } = await sb
     .from('answers')
-    .insert({ id, question_id: questionId, text, position, is_correct: false })
+    .insert({
+      id,
+      question_id: questionId,
+      text,
+      position,
+      is_correct: initial.is_correct ?? false,
+      answer_points: initial.answer_points ?? null,
+    })
     .select()
     .single();
   if (error) throw error;

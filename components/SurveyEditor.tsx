@@ -26,14 +26,19 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(fn: T, ms = 40
 export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose: () => void }) {
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
+  const reqIdRef = useRef(0);
 
   const reload = async () => {
+    const myId = ++reqIdRef.current;
     const s = await getSurvey(surveyId);
+    // Descarta resultados obsoletos (ordem de chegada vs. ordem de início)
+    if (myId !== reqIdRef.current) return;
     setSurvey(s);
     setLoading(false);
   };
 
   useEffect(() => {
+    reqIdRef.current = 0;
     reload();
     const unsub = subscribeSurveyChanges(surveyId, reload);
     return unsub;

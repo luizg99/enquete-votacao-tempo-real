@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
-import type { Execution, TallyQuestion } from '@/lib/types';
+import type { Execution, TallyQuestion, ScoreBand } from '@/lib/types';
 import {
   getExecution,
   setCurrentQuestion,
@@ -17,10 +18,14 @@ import {
   subscribeExecutionResponses,
   subscribeParticipants,
 } from '@/lib/executions';
-import { subscribeSurveyChanges } from '@/lib/store';
+import {
+  subscribeSurveyChanges,
+  listScoreBands,
+  subscribeScoreBands,
+} from '@/lib/store';
 import { Timer } from './Timer';
 
-type LayoutMode = 'split' | 'qr-fullscreen' | 'graph-fullscreen';
+type LayoutMode = 'split' | 'qr-fullscreen' | 'graph-fullscreen' | 'bands-fullscreen';
 
 export function RunPanel({ executionId }: { executionId: string }) {
   const router = useRouter();
@@ -28,6 +33,7 @@ export function RunPanel({ executionId }: { executionId: string }) {
   const [tally, setTally] = useState<TallyQuestion[]>([]);
   const [participantCount, setParticipantCount] = useState(0);
   const [questionStates, setQuestionStates] = useState<Map<string, string>>(new Map());
+  const [bands, setBands] = useState<ScoreBand[]>([]);
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<LayoutMode>('split');
 
@@ -80,6 +86,26 @@ export function RunPanel({ executionId }: { executionId: string }) {
     return unsub;
   }, [exec?.survey_id]);
 
+  useEffect(() => {
+    if (!exec?.survey_id) return;
+    if (exec.survey?.scoring_mode !== 'per_answer') {
+      setBands([]);
+      return;
+    }
+    const surveyId = exec.survey_id;
+    const reloadBands = async () => {
+      try {
+        const list = await listScoreBands(surveyId);
+        setBands(list);
+      } catch {
+        // silencioso
+      }
+    };
+    reloadBands();
+    const unsub = subscribeScoreBands(surveyId, reloadBands);
+    return unsub;
+  }, [exec?.survey_id, exec?.survey?.scoring_mode]);
+
   const questions = exec?.survey?.questions ?? [];
   const currentIdx = useMemo(() => {
     if (!exec?.current_question_id) return -1;
@@ -100,7 +126,11 @@ export function RunPanel({ executionId }: { executionId: string }) {
   const handleFinish = async () => {
     if (!confirm('Deseja realmente finalizar a execução?')) return;
     await finishExecution(executionId);
-    router.push('/executions');
+    // Em per_answer, o anfitrião continua no painel para acionar "Mostrar classificações".
+    // Nos demais modos preserva o fluxo atual (volta para a listagem).
+    if (exec?.survey?.scoring_mode !== 'per_answer') {
+      router.push('/executions');
+    }
   };
 
   if (loading) return <div className="card">Carregando…</div>;
@@ -111,6 +141,16 @@ export function RunPanel({ executionId }: { executionId: string }) {
       <QrFullscreen
         executionId={executionId}
         title={exec.title}
+        onClose={() => setLayout('split')}
+      />
+    );
+  }
+
+  if (layout === 'bands-fullscreen') {
+    return (
+      <BandsFullscreen
+        title={exec.title}
+        bands={bands}
         onClose={() => setLayout('split')}
       />
     );
@@ -239,41 +279,62 @@ export function RunPanel({ executionId }: { executionId: string }) {
         )}
       </div>
 
-      <div className="run-footer">
-        <button className="btn" disabled={currentIdx <= 0} onClick={goPrev}>
-          ← Pergunta anterior
-        </button>
-        <div className="muted" style={{ alignSelf: 'center' }}>
-          {questions.length > 0
-            ? `Pergunta ${Math.max(currentIdx + 1, 1)} de ${questions.length}`
-            : '—'}
+      {exec.status === 'finished' && exec.survey?.scoring_mode === 'per_answer' ? (
+        <div className="run-footer">
+          <strong style={{ alignSelf: 'center' }}>✓ Execução finalizada</strong>
+          <div className="spacer" />
+          <button
+            className="btn primary"
+            onClick={() => setLayout('bands-fullscreen')}
+            disabled={bands.length === 0}
+            title={bands.length === 0 ? 'Sem faixas configuradas para exibir' : undefined}
+          >
+            ▦ Mostrar classificações
+          </button>
+          <Link href={`/executions/results?id=${executionId}`} className="btn">
+            Ver resultados
+          </Link>
+          <button className="btn ghost" onClick={() => router.push('/executions')}>
+            ← Voltar
+          </button>
         </div>
-        <button
-          className="btn primary"
-          disabled={currentIdx < 0 || currentIdx >= questions.length - 1}
-          onClick={goNext}
-        >
-          Próxima pergunta →
-        </button>
-        <button
-          className="btn"
-          disabled={!exec.current_question_id || exec.status !== 'running'}
-          onClick={async () => {
-            if (!confirm('Reiniciar contagem desta pergunta?')) return;
-            try {
-              await restartCurrentQuestionTimer(executionId);
-            } catch (e: any) {
-              alert('Erro ao reiniciar: ' + (e.message ?? e));
-            }
-          }}
-        >
-          ↻ Reiniciar timer
-        </button>
-        <div className="spacer" />
-        <button className="btn danger" onClick={handleFinish} disabled={exec.status === 'finished'}>
-          Finalizar execução
-        </button>
-      </div>
+      ) : (
+        <div className="run-footer">
+          <button className="btn" disabled={currentIdx <= 0} onClick={goPrev}>
+            ← Pergunta anterior
+          </button>
+          <div className="muted" style={{ alignSelf: 'center' }}>
+            {questions.length > 0
+              ? `Pergunta ${Math.max(currentIdx + 1, 1)} de ${questions.length}`
+              : '—'}
+          </div>
+          <button
+            className="btn primary"
+            disabled={currentIdx < 0 || currentIdx >= questions.length - 1}
+            onClick={goNext}
+          >
+            Próxima pergunta →
+          </button>
+          <button
+            className="btn"
+            disabled={!exec.current_question_id || exec.status !== 'running'}
+            onClick={async () => {
+              if (!confirm('Reiniciar contagem desta pergunta?')) return;
+              try {
+                await restartCurrentQuestionTimer(executionId);
+              } catch (e: any) {
+                alert('Erro ao reiniciar: ' + (e.message ?? e));
+              }
+            }}
+          >
+            ↻ Reiniciar timer
+          </button>
+          <div className="spacer" />
+          <button className="btn danger" onClick={handleFinish} disabled={exec.status === 'finished'}>
+            Finalizar execução
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -329,6 +390,76 @@ function QrFullscreen({
       <canvas ref={canvasRef} />
       <div className="url-label">{url}</div>
       <p className="muted" style={{ marginTop: 8 }}>Aponte a câmera do celular para participar</p>
+    </div>
+  );
+}
+
+function BandsFullscreen({
+  title,
+  bands,
+  onClose,
+}: {
+  title: string;
+  bands: ScoreBand[];
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="qr-fullscreen"
+      style={{ alignItems: 'center', justifyContent: 'flex-start' }}
+    >
+      <button className="btn close" onClick={onClose}>✕ Fechar</button>
+      <h2 style={{ marginBottom: 8 }}>{title || 'Execução'}</h2>
+      <h1 style={{ margin: '8px 0 24px', textAlign: 'center' }}>
+        Descubra sua classificação
+      </h1>
+
+      {bands.length === 0 ? (
+        <p className="muted">Sem faixas configuradas.</p>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            width: 'min(900px, 90vw)',
+          }}
+        >
+          {bands.map((b) => (
+            <div
+              key={b.id}
+              style={{
+                display: 'flex',
+                gap: 16,
+                alignItems: 'baseline',
+                padding: '16px 20px',
+                background: '#f8fafc',
+                border: '1px solid #e5e7eb',
+                borderRadius: 10,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 32,
+                  fontWeight: 700,
+                  minWidth: 140,
+                  color: '#4f46e5',
+                }}
+              >
+                {b.min_points} – {b.max_points}
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <strong style={{ fontSize: 26 }}>{b.label || '—'}</strong>
+                {b.observation && (
+                  <span className="muted" style={{ fontSize: 18 }}>
+                    {b.observation}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

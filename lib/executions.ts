@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase';
-import { getSurvey } from './store';
+import { getSurvey, listScoreBands } from './store';
 import type {
   Execution,
   ExecutionStatus,
@@ -7,6 +7,7 @@ import type {
   ExecutionResponse,
   ExecutionQuestionState,
   RankingEntry,
+  ParticipantResult,
   TallyQuestion,
   Survey,
 } from './types';
@@ -109,10 +110,61 @@ export async function deleteExecution(id: string) {
   if (error) throw error;
 }
 
+async function validateSurveyForStart(survey: Survey | undefined) {
+  if (!survey) throw new Error('Enquete não encontrada para esta execução.');
+  const mode = survey.scoring_mode ?? 'general';
+
+  const optionQuestions = survey.questions.filter((q) => q.type === 'options');
+
+  if (mode === 'general') {
+    const without = optionQuestions.filter(
+      (q) => !q.answers.some((a) => a.is_correct)
+    );
+    if (without.length > 0) {
+      const idx = survey.questions.findIndex((q) => q.id === without[0].id) + 1;
+      throw new Error(
+        `Pontuação geral requer ao menos uma resposta marcada como correta em cada pergunta. ` +
+          `A pergunta nº ${idx} não tem nenhuma resposta correta.`
+      );
+    }
+    return;
+  }
+
+  if (mode === 'per_answer') {
+    for (const q of optionQuestions) {
+      const idx = survey.questions.findIndex((x) => x.id === q.id) + 1;
+      if (q.answers.length === 0) {
+        throw new Error(`A pergunta nº ${idx} não tem alternativas cadastradas.`);
+      }
+      const missing = q.answers.find(
+        (a) => a.answer_points == null || a.answer_points < 1 || a.answer_points > 10
+      );
+      if (missing) {
+        throw new Error(
+          `Pontuação por resposta requer pontuação (1 a 10) em todas as alternativas. ` +
+            `Pergunta nº ${idx} tem alternativa sem pontuação válida.`
+        );
+      }
+    }
+    const bands = await listScoreBands(survey.id);
+    if (bands.length === 0) {
+      throw new Error(
+        'Pontuação por resposta requer ao menos uma faixa de classificação cadastrada na enquete.'
+      );
+    }
+  }
+}
+
 export async function startExecution(id: string): Promise<Execution> {
   const exec = await getExecution(id);
   if (!exec) throw new Error('Execução não encontrada');
   const firstQuestion = exec.survey?.questions?.[0]?.id ?? null;
+
+  // Valida apenas na transição inicial (draft -> running). Reabertura de execução
+  // já em andamento não passa pela validação para não travar recuperação.
+  if (exec.status === 'draft') {
+    await validateSurveyForStart(exec.survey);
+  }
 
   const patch: any = { status: 'running' as ExecutionStatus };
   if (!exec.started_at) patch.started_at = new Date().toISOString();
@@ -462,9 +514,7 @@ export function subscribeQuestionStates(executionId: string, onChange: () => voi
 export async function executionIsScored(executionId: string): Promise<boolean> {
   const exec = await getExecution(executionId);
   if (!exec || !exec.survey) return false;
-  return exec.survey.questions.some((q) =>
-    q.answers.some((a) => a.is_correct)
-  );
+  return (exec.survey.scoring_mode ?? 'general') !== 'none';
 }
 
 export async function loadRanking(executionId: string): Promise<RankingEntry[]> {
@@ -517,4 +567,64 @@ export async function loadOwnRank(
 ): Promise<RankingEntry | null> {
   const ranking = await loadRanking(executionId);
   return ranking.find((r) => r.participantId === participantId) ?? null;
+}
+
+export async function loadOwnPoints(
+  executionId: string,
+  participantId: string
+): Promise<number> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from('execution_question_scores')
+    .select('points')
+    .eq('execution_id', executionId)
+    .eq('participant_id', participantId);
+  if (error) throw error;
+  return (data ?? []).reduce(
+    (sum: number, r: any) => sum + Number(r.points ?? 0),
+    0
+  );
+}
+
+export async function loadParticipantResults(
+  executionId: string
+): Promise<ParticipantResult[]> {
+  const exec = await getExecution(executionId);
+  if (!exec || !exec.survey) return [];
+  const surveyId = exec.survey.id;
+  const mode = exec.survey.scoring_mode ?? 'general';
+
+  const ranking = await loadRanking(executionId);
+  if (mode !== 'per_answer') {
+    return ranking.map((r) => ({ ...r, band: null }));
+  }
+
+  const sb = getSupabase();
+  const { data: bandsData, error } = await sb
+    .from('survey_score_bands')
+    .select('*')
+    .eq('survey_id', surveyId)
+    .order('position', { ascending: true });
+  if (error) throw error;
+  const bands = (bandsData ?? []) as Array<{
+    label: string;
+    observation: string;
+    min_points: number;
+    max_points: number;
+  }>;
+
+  const findBand = (points: number) => {
+    const rounded = Math.round(points);
+    const b = bands.find((x) => rounded >= x.min_points && rounded <= x.max_points);
+    return b
+      ? {
+          label: b.label,
+          observation: b.observation,
+          min_points: b.min_points,
+          max_points: b.max_points,
+        }
+      : null;
+  };
+
+  return ranking.map((r) => ({ ...r, band: findBand(r.totalPoints) }));
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { Survey } from '@/lib/types';
+import type { Survey, ScoringMode } from '@/lib/types';
 import {
   getSurvey,
   updateSurvey,
@@ -13,6 +13,7 @@ import {
   updateAnswer,
   subscribeSurveyChanges,
 } from '@/lib/store';
+import { ScoreBandsEditor } from './ScoreBandsEditor';
 
 function useDebouncedCallback<T extends (...args: any[]) => void>(fn: T, ms = 400) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,6 +42,11 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
   if (loading) return <div className="card">Carregando…</div>;
   if (!survey) return <div className="card">Enquete não encontrada.</div>;
 
+  const mode: ScoringMode = survey.scoring_mode ?? 'general';
+  const isPerAnswer = mode === 'per_answer';
+  const isGeneral = mode === 'general';
+  const hasScoring = mode !== 'none';
+
   return (
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>
@@ -58,20 +64,31 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <label className="muted">Pontuação por pergunta correta</label>
-        <PointsPerCorrectInput survey={survey} />
+        <label className="muted">Tipo de Pontuação</label>
+        <ScoringModeSelect survey={survey} />
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
-        <input
-          type="checkbox"
-          checked={survey.show_own_rank_to_client}
-          onChange={(e) =>
-            updateSurvey(survey.id, { show_own_rank_to_client: e.target.checked })
-          }
-        />
-        <span>Mostrar posição própria para o cliente ao final</span>
-      </label>
+      {isGeneral && (
+        <div style={{ marginTop: 12 }}>
+          <label className="muted">Pontuação por pergunta correta</label>
+          <PointsPerCorrectInput survey={survey} />
+        </div>
+      )}
+
+      {hasScoring && (
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}
+        >
+          <input
+            type="checkbox"
+            checked={survey.show_own_rank_to_client}
+            onChange={(e) =>
+              updateSurvey(survey.id, { show_own_rank_to_client: e.target.checked })
+            }
+          />
+          <span>Mostrar posição própria para o cliente ao final</span>
+        </label>
+      )}
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
         <input
@@ -102,7 +119,7 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
           <ImportButtons survey={survey} />
         </div>
         {survey.questions.map((q) => (
-          <QuestionBlock key={q.id} surveyId={survey.id} question={q} />
+          <QuestionBlock key={q.id} survey={survey} question={q} />
         ))}
         <div style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => addQuestion(survey.id, '')}>
@@ -110,6 +127,56 @@ export function SurveyEditor({ surveyId, onClose }: { surveyId: string; onClose:
           </button>
         </div>
       </div>
+
+      {isPerAnswer && <ScoreBandsEditor surveyId={survey.id} />}
+    </div>
+  );
+}
+
+function ScoringModeSelect({ survey }: { survey: Survey }) {
+  const current: ScoringMode = survey.scoring_mode ?? 'general';
+
+  const handleChange = async (next: ScoringMode) => {
+    if (next === current) return;
+
+    // Confirmações por transição
+    if (current === 'general' && next === 'per_answer') {
+      const ok = confirm(
+        'Trocar para "Com pontuação por resposta"?\n\n' +
+          'As marcações de "Resposta correta" serão ignoradas e cada alternativa precisará de uma pontuação (1 a 10).'
+      );
+      if (!ok) return;
+    } else if (current === 'per_answer' && next !== 'per_answer') {
+      const ok = confirm(
+        'Trocar de "Com pontuação por resposta" para outro modo?\n\n' +
+          'Os pontos por alternativa e as faixas de classificação ficarão inativos. Se voltar a este modo no futuro, os dados estarão preservados.'
+      );
+      if (!ok) return;
+    } else if (current === 'none' && next !== 'none') {
+      // sem confirmação necessária — só vai aparecer mais UI
+    } else if (next === 'none') {
+      const ok = confirm(
+        'Trocar para "Sem pontuação"?\n\n' +
+          'Os campos de pontuação ficam ocultos. Os dados existentes não são apagados.'
+      );
+      if (!ok) return;
+    }
+
+    await updateSurvey(survey.id, { scoring_mode: next });
+  };
+
+  return (
+    <div className="row" style={{ gap: 8, marginTop: 4 }}>
+      <select
+        className="select"
+        value={current}
+        onChange={(e) => handleChange(e.target.value as ScoringMode)}
+        style={{ maxWidth: 320 }}
+      >
+        <option value="none">SEM PONTUAÇÃO</option>
+        <option value="general">COM PONTUAÇÃO GERAL</option>
+        <option value="per_answer">COM PONTUAÇÃO POR RESPOSTA</option>
+      </select>
     </div>
   );
 }
@@ -207,13 +274,28 @@ function TitleInput({ survey }: { survey: Survey }) {
 }
 
 function QuestionBlock({
-  surveyId,
+  survey,
   question,
 }: {
-  surveyId: string;
+  survey: Survey;
   question: Survey['questions'][number];
 }) {
   const isText = question.type === 'text';
+  const mode: ScoringMode = survey.scoring_mode ?? 'general';
+  const isPerAnswer = mode === 'per_answer';
+  const isGeneral = mode === 'general';
+
+  const helperText = (() => {
+    if (!isPerAnswer || isText || question.answers.length === 0) return null;
+    const letters = question.answers
+      .map((a, i) => `${String.fromCharCode(97 + i)}=${a.answer_points ?? '?'} ${a.answer_points === 1 ? 'ponto' : 'pontos'}`)
+      .join(' | ');
+    const intro = survey.allow_multiple_choices
+      ? 'marque uma ou mais alternativas. A pontuação da pergunta será a soma dos pontos das alternativas marcadas.'
+      : 'marque uma única alternativa por pergunta.';
+    return `Instruções: ${intro}\nPontuação: ${letters}`;
+  })();
+
   return (
     <div className="question-block">
       <div className="row">
@@ -262,22 +344,55 @@ function QuestionBlock({
         </>
       ) : (
         <>
+          {helperText && (
+            <pre
+              className="muted"
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontFamily: 'inherit',
+                fontSize: 13,
+                margin: '8px 0',
+                padding: 8,
+                background: '#f8fafc',
+                border: '1px solid #e5e7eb',
+                borderRadius: 6,
+              }}
+            >
+              {helperText}
+            </pre>
+          )}
+
           <div>
-            {question.answers.map((a) => (
+            {question.answers.map((a, idx) => (
               <div key={a.id} className="answer-row">
-                <AnswerTextInput answer={a} />
-                <label
-                  className="answer-correct"
-                  title="Marcar como resposta correta"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                <span
+                  className="muted"
+                  style={{ minWidth: 22, textAlign: 'right', fontSize: 13 }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={a.is_correct}
-                    onChange={(e) => updateAnswer(a.id, { is_correct: e.target.checked })}
-                  />
-                  <span style={{ fontSize: 13 }}>Correta</span>
-                </label>
+                  {String.fromCharCode(97 + idx)})
+                </span>
+                <AnswerTextInput answer={a} />
+                {isGeneral && (
+                  <label
+                    className="answer-correct"
+                    title="Marcar como resposta correta"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={a.is_correct}
+                      onChange={(e) => updateAnswer(a.id, { is_correct: e.target.checked })}
+                    />
+                    <span style={{ fontSize: 13 }}>Correta</span>
+                  </label>
+                )}
+                {isPerAnswer && <AnswerPointsInput answer={a} />}
                 <button
                   className="btn icon danger"
                   title="Excluir resposta"
@@ -341,6 +456,64 @@ function AnswerTextInput({ answer }: { answer: Survey['questions'][number]['answ
         save(e.target.value);
       }}
     />
+  );
+}
+
+function AnswerPointsInput({
+  answer,
+}: {
+  answer: Survey['questions'][number]['answers'][number];
+}) {
+  const [value, setValue] = useState(answer.answer_points == null ? '' : String(answer.answer_points));
+  const save = useDebouncedCallback((v: string) => {
+    const trimmed = v.trim();
+    if (trimmed === '') {
+      updateAnswer(answer.id, { answer_points: null });
+      return;
+    }
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed)) return;
+    const n = Math.max(1, Math.min(10, parsed));
+    updateAnswer(answer.id, { answer_points: n });
+  }, 400);
+
+  useEffect(() => {
+    setValue(answer.answer_points == null ? '' : String(answer.answer_points));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answer.id]);
+
+  const invalid = value !== '' && (parseInt(value, 10) < 1 || parseInt(value, 10) > 10 || !Number.isFinite(parseInt(value, 10)));
+
+  return (
+    <label
+      className="answer-points"
+      title="Pontuação desta alternativa (1 a 10)"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span style={{ fontSize: 13 }} className="muted">
+        Pontos
+      </span>
+      <input
+        type="number"
+        min={1}
+        max={10}
+        step={1}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          save(e.target.value);
+        }}
+        style={{
+          width: 64,
+          ...(invalid ? { borderColor: '#dc2626', background: '#fef2f2' } : {}),
+        }}
+      />
+    </label>
   );
 }
 

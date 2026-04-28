@@ -18,10 +18,15 @@ import {
   subscribeExecution,
   subscribeExecutionResponses,
   loadOwnRank,
+  loadOwnPoints,
   executionIsScored,
 } from '@/lib/executions';
-import type { RankingEntry } from '@/lib/types';
-import { subscribeSurveyChanges } from '@/lib/store';
+import type { RankingEntry, ScoreBand } from '@/lib/types';
+import {
+  subscribeSurveyChanges,
+  listScoreBands,
+  getBandForScore,
+} from '@/lib/store';
 import {
   getDeviceId,
   getCachedParticipantId,
@@ -606,6 +611,22 @@ function FinishedBlock({
   execution: Execution;
   participant: Participant;
 }) {
+  const mode = execution.survey?.scoring_mode ?? 'general';
+
+  if (mode === 'per_answer') {
+    return <PerAnswerFinishedBlock execution={execution} participant={participant} />;
+  }
+
+  return <GeneralFinishedBlock execution={execution} participant={participant} />;
+}
+
+function GeneralFinishedBlock({
+  execution,
+  participant,
+}: {
+  execution: Execution;
+  participant: Participant;
+}) {
   const [ownRank, setOwnRank] = useState<RankingEntry | null>(null);
   const [scored, setScored] = useState<boolean | null>(null);
   const showRank = execution.survey?.show_own_rank_to_client === true;
@@ -654,6 +675,231 @@ function FinishedBlock({
         {ownRank.totalPoints.toFixed(2)} pontos
       </p>
       <p className="muted">Obrigado pela sua participação!</p>
+    </div>
+  );
+}
+
+type PerAnswerView = 'result' | 'bands' | 'closed';
+
+function closedKey(execId: string) {
+  return `closed:${execId}`;
+}
+
+function PerAnswerFinishedBlock({
+  execution,
+  participant,
+}: {
+  execution: Execution;
+  participant: Participant;
+}) {
+  const [points, setPoints] = useState<number | null>(null);
+  const [ownBand, setOwnBand] = useState<{
+    label: string;
+    observation: string;
+    min_points: number;
+    max_points: number;
+  } | null>(null);
+  const [bands, setBands] = useState<ScoreBand[]>([]);
+  const [view, setView] = useState<PerAnswerView>(() => {
+    if (typeof window === 'undefined') return 'result';
+    try {
+      return window.localStorage.getItem(closedKey(execution.id)) === '1'
+        ? 'closed'
+        : 'result';
+    } catch {
+      return 'result';
+    }
+  });
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [p, list] = await Promise.all([
+          loadOwnPoints(execution.id, participant.id),
+          execution.survey_id ? listScoreBands(execution.survey_id) : Promise.resolve([]),
+        ]);
+        if (!active) return;
+        setPoints(p);
+        setBands(list);
+        if (execution.survey_id) {
+          const b = await getBandForScore(execution.survey_id, p);
+          if (active) setOwnBand(b);
+        }
+      } catch {
+        // silencioso
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [execution.id, execution.survey_id, participant.id]);
+
+  const close = () => {
+    try {
+      window.localStorage.setItem(closedKey(execution.id), '1');
+    } catch {
+      // silencioso
+    }
+    setView('closed');
+  };
+
+  if (points === null) {
+    return (
+      <div className="card center">
+        <h1>✓ Execução encerrada</h1>
+        <p className="muted">Calculando sua pontuação…</p>
+      </div>
+    );
+  }
+
+  if (view === 'bands') {
+    return (
+      <BandsScreen
+        bands={bands}
+        highlightBandKey={
+          ownBand ? `${ownBand.min_points}-${ownBand.max_points}` : null
+        }
+        onBack={() => setView('result')}
+        onClose={close}
+      />
+    );
+  }
+
+  if (view === 'closed') {
+    return (
+      <div className="card center">
+        <h1>✓ Obrigado pela participação!</h1>
+        {bands.length > 0 && (
+          <button
+            className="btn ghost"
+            style={{ marginTop: 12 }}
+            onClick={() => setView('bands')}
+          >
+            Mostrar classificações
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // view === 'result'
+  return (
+    <div className="card center">
+      <h1>Você fez {points} {points === 1 ? 'ponto' : 'pontos'}</h1>
+      {ownBand ? (
+        <>
+          <p
+            style={{
+              fontSize: 22,
+              fontWeight: 600,
+              color: '#4f46e5',
+              margin: '8px 0',
+            }}
+          >
+            {ownBand.label}
+          </p>
+          {ownBand.observation && (
+            <p className="muted" style={{ marginTop: -4 }}>
+              ({ownBand.observation})
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="muted">Sem classificação para esta pontuação.</p>
+      )}
+
+      <div
+        className="row"
+        style={{ justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}
+      >
+        {bands.length > 0 && (
+          <button className="btn" onClick={() => setView('bands')}>
+            Ver todas as classificações
+          </button>
+        )}
+        <button className="btn ghost" onClick={close}>
+          Encerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BandsScreen({
+  bands,
+  highlightBandKey,
+  onBack,
+  onClose,
+}: {
+  bands: ScoreBand[];
+  highlightBandKey: string | null;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="card">
+      <h1 style={{ textAlign: 'center', marginBottom: 12 }}>
+        Descubra sua classificação
+      </h1>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {bands.map((b) => {
+          const key = `${b.min_points}-${b.max_points}`;
+          const isMine = key === highlightBandKey;
+          return (
+            <div
+              key={b.id}
+              aria-current={isMine ? 'true' : undefined}
+              style={{
+                padding: '10px 12px',
+                border: '1px solid ' + (isMine ? '#4f46e5' : '#e5e7eb'),
+                background: isMine ? '#eef2ff' : '#f8fafc',
+                borderRadius: 6,
+                display: 'flex',
+                gap: 10,
+                alignItems: 'baseline',
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 600,
+                  minWidth: 80,
+                  color: isMine ? '#4f46e5' : 'inherit',
+                }}
+              >
+                {b.min_points} – {b.max_points}
+              </span>
+              <span style={{ fontWeight: 600 }}>{b.label || '—'}</span>
+              {b.observation && (
+                <span className="muted" style={{ fontSize: 13 }}>
+                  ({b.observation})
+                </span>
+              )}
+              {isMine && (
+                <span
+                  className="muted"
+                  style={{ marginLeft: 'auto', fontSize: 13, color: '#4f46e5' }}
+                >
+                  ← você
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div
+        className="row"
+        style={{ justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}
+      >
+        <button className="btn ghost" onClick={onBack}>
+          ← Voltar
+        </button>
+        <button className="btn" onClick={onClose}>
+          Encerrar
+        </button>
+      </div>
     </div>
   );
 }

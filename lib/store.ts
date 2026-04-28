@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase';
-import type { Survey, Question, Answer, TallyQuestion } from './types';
+import type { Survey, Question, Answer, TallyQuestion, ScoreBand } from './types';
 
 function uid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
@@ -39,6 +39,7 @@ export async function createSurvey(title = 'Nova enquete'): Promise<Survey> {
   return {
     ...(data as any),
     time_per_question: (data as any).time_per_question ?? 60,
+    scoring_mode: ((data as any).scoring_mode as Survey['scoring_mode']) ?? 'general',
     points_per_correct: (data as any).points_per_correct ?? 1,
     show_own_rank_to_client: (data as any).show_own_rank_to_client ?? false,
     questions: [],
@@ -47,7 +48,7 @@ export async function createSurvey(title = 'Nova enquete'): Promise<Survey> {
 
 export async function updateSurvey(
   id: string,
-  patch: Partial<Pick<Survey, 'title' | 'single_vote_per_device' | 'allow_multiple_choices' | 'time_per_question' | 'points_per_correct' | 'show_own_rank_to_client'>>
+  patch: Partial<Pick<Survey, 'title' | 'single_vote_per_device' | 'allow_multiple_choices' | 'time_per_question' | 'scoring_mode' | 'points_per_correct' | 'show_own_rank_to_client'>>
 ) {
   const sb = getSupabase();
   const { error } = await sb.from('surveys').update(patch).eq('id', id);
@@ -113,10 +114,17 @@ export async function addAnswer(questionId: string, text = ''): Promise<Answer> 
     .select()
     .single();
   if (error) throw error;
-  return { ...(data as any), is_correct: (data as any).is_correct ?? false } as Answer;
+  return {
+    ...(data as any),
+    is_correct: (data as any).is_correct ?? false,
+    answer_points: (data as any).answer_points ?? null,
+  } as Answer;
 }
 
-export async function updateAnswer(id: string, patch: Partial<Pick<Answer, 'text' | 'is_correct'>>) {
+export async function updateAnswer(
+  id: string,
+  patch: Partial<Pick<Answer, 'text' | 'is_correct' | 'answer_points'>>
+) {
   const sb = getSupabase();
   const { error } = await sb.from('answers').update(patch).eq('id', id);
   if (error) throw error;
@@ -126,6 +134,124 @@ export async function removeAnswer(id: string) {
   const sb = getSupabase();
   const { error } = await sb.from('answers').delete().eq('id', id);
   if (error) throw error;
+}
+
+// ---------- Score bands (faixas de classificação para scoring_mode='per_answer') ----------
+const DEFAULT_BANDS: Array<Pick<ScoreBand, 'min_points' | 'max_points' | 'label' | 'observation'>> = [
+  { min_points: 7,  max_points: 12, label: 'Iniciante',          observation: 'estoque no improviso' },
+  { min_points: 13, max_points: 18, label: 'Em desenvolvimento', observation: 'processos parciais' },
+  { min_points: 19, max_points: 24, label: 'Intermediário',      observation: 'gestão estruturada' },
+  { min_points: 25, max_points: 28, label: 'Avançado',           observation: 'referência de mercado' },
+];
+
+export async function listScoreBands(surveyId: string): Promise<ScoreBand[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from('survey_score_bands')
+    .select('*')
+    .eq('survey_id', surveyId)
+    .order('position', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as ScoreBand[];
+}
+
+export async function addScoreBand(
+  surveyId: string,
+  patch: Partial<Pick<ScoreBand, 'position' | 'min_points' | 'max_points' | 'label' | 'observation'>>
+): Promise<ScoreBand> {
+  const sb = getSupabase();
+  const id = uid('band');
+  const { count } = await sb
+    .from('survey_score_bands')
+    .select('*', { count: 'exact', head: true })
+    .eq('survey_id', surveyId);
+  const row = {
+    id,
+    survey_id: surveyId,
+    position: patch.position ?? count ?? 0,
+    min_points: patch.min_points ?? 0,
+    max_points: patch.max_points ?? 0,
+    label: patch.label ?? '',
+    observation: patch.observation ?? '',
+  };
+  const { data, error } = await sb
+    .from('survey_score_bands')
+    .insert(row)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as ScoreBand;
+}
+
+export async function updateScoreBand(
+  id: string,
+  patch: Partial<Pick<ScoreBand, 'position' | 'min_points' | 'max_points' | 'label' | 'observation'>>
+) {
+  const sb = getSupabase();
+  const { error } = await sb.from('survey_score_bands').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+export async function removeScoreBand(id: string) {
+  const sb = getSupabase();
+  const { error } = await sb.from('survey_score_bands').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function seedDefaultBands(surveyId: string): Promise<ScoreBand[]> {
+  const sb = getSupabase();
+  // Limpa faixas existentes antes de semear (idempotente para "Restaurar exemplo")
+  await sb.from('survey_score_bands').delete().eq('survey_id', surveyId);
+  const rows = DEFAULT_BANDS.map((b, i) => ({
+    id: uid('band'),
+    survey_id: surveyId,
+    position: i,
+    min_points: b.min_points,
+    max_points: b.max_points,
+    label: b.label,
+    observation: b.observation,
+  }));
+  const { data, error } = await sb
+    .from('survey_score_bands')
+    .insert(rows)
+    .select();
+  if (error) throw error;
+  return (data ?? []) as ScoreBand[];
+}
+
+export async function getBandForScore(
+  surveyId: string,
+  points: number
+): Promise<{ label: string; observation: string; min_points: number; max_points: number } | null> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc('get_band_for_score', {
+    p_survey: surveyId,
+    p_points: Math.round(points),
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return {
+    label: row.label,
+    observation: row.observation,
+    min_points: row.min_points,
+    max_points: row.max_points,
+  };
+}
+
+export function subscribeScoreBands(surveyId: string, onChange: () => void) {
+  const sb = getSupabase();
+  const channel = sb
+    .channel(`bands-${surveyId}-${rand()}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'survey_score_bands', filter: `survey_id=eq.${surveyId}` },
+      () => onChange()
+    )
+    .subscribe();
+  return () => {
+    sb.removeChannel(channel);
+  };
 }
 
 // ---------- Survey voters (legacy /vote) ----------
@@ -348,6 +474,7 @@ function normalizeSurvey(row: any): Survey {
           text: a.text,
           position: a.position ?? 0,
           is_correct: a.is_correct ?? false,
+          answer_points: a.answer_points ?? null,
         })),
     }));
   return {
@@ -356,6 +483,7 @@ function normalizeSurvey(row: any): Survey {
     single_vote_per_device: row.single_vote_per_device ?? true,
     allow_multiple_choices: row.allow_multiple_choices ?? false,
     time_per_question: row.time_per_question ?? 60,
+    scoring_mode: (row.scoring_mode as Survey['scoring_mode']) ?? 'general',
     points_per_correct: row.points_per_correct ?? 1,
     show_own_rank_to_client: row.show_own_rank_to_client ?? false,
     created_at: row.created_at,

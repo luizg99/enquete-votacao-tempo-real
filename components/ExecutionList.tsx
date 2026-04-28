@@ -40,13 +40,12 @@ export function ExecutionList() {
     try {
       const sb = getSupabase();
       const { data } = await sb
-        .from('answers')
-        .select('question_id, questions(survey_id)')
-        .eq('is_correct', true);
+        .from('surveys')
+        .select('id, scoring_mode')
+        .neq('scoring_mode', 'none');
       const ids = new Set<string>();
       (data ?? []).forEach((row: any) => {
-        const sid = row.questions?.survey_id;
-        if (sid) ids.add(sid);
+        if (row.id) ids.add(row.id);
       });
       setScoredSurveys(ids);
     } catch {
@@ -165,8 +164,8 @@ export function ExecutionList() {
                   Acompanhar
                 </Link>
                 {e.status === 'finished' && scoredSurveys.has(e.survey_id) && (
-                  <Link href={`/executions/ranking?id=${e.id}`} className="btn primary">
-                    Ver ranking
+                  <Link href={`/executions/results?id=${e.id}`} className="btn primary">
+                    Ver resultados
                   </Link>
                 )}
                 <button className="btn danger" onClick={() => handleDelete(e.id, e.title)}>

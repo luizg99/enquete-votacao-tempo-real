@@ -4,7 +4,20 @@ export type Answer = {
   text: string;
   position: number;
   is_correct: boolean;
+  answer_points: number | null;
   votes?: number;
+};
+
+export type ScoringMode = 'none' | 'general' | 'per_answer';
+
+export type ScoreBand = {
+  id: string;
+  survey_id: string;
+  position: number;
+  min_points: number;
+  max_points: number;
+  label: string;
+  observation: string;
 };
 
 export type QuestionType = 'options' | 'text';
@@ -25,10 +38,21 @@ export type Survey = {
   single_vote_per_device: boolean;
   allow_multiple_choices: boolean;
   time_per_question: number;
+  scoring_mode: ScoringMode;
   points_per_correct: number;
   show_own_rank_to_client: boolean;
   created_at: string;
   questions: Question[];
+  scoreBands?: ScoreBand[];
+};
+
+export type ParticipantResult = {
+  participantId: string;
+  name: string;
+  company: string;
+  totalPoints: number;
+  band: { label: string; observation: string; min_points: number; max_points: number } | null;
+  position: number;
 };
 
 export type TallyAnswer = {

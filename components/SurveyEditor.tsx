@@ -189,7 +189,7 @@ function ImportButtons({ survey }: { survey: Survey }) {
     setBusy('template');
     try {
       const { downloadTemplate } = await import('@/lib/excelImport');
-      await downloadTemplate();
+      await downloadTemplate(survey.scoring_mode ?? 'general');
     } catch (e: any) {
       alert('Erro ao gerar planilha: ' + (e.message ?? e));
     } finally {
